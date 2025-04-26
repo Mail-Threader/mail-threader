@@ -64,5 +64,8 @@
 	"editor.tabSize": 4,
 	"editor.insertSpaces": true,
 	"files.trimTrailingWhitespace": true,
-	"files.insertFinalNewline": true
+	"files.insertFinalNewline": true,
+	"files.watcherExclude": {
+		"**/target": true
+	}
 }
