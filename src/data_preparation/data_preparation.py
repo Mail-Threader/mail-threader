@@ -1,5 +1,6 @@
-from loguru import logger
+# from loguru import logger
 import os
+
 
 class DataPreparation:
     """
@@ -31,6 +32,6 @@ if __name__ == "__main__":
     data_prep = DataPreparation()
 
     # Process emails
-    df = data_prep.process_emails()
+    # df = data_prep.process_emails()
 
     print("Done!")

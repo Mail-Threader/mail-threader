@@ -174,7 +174,7 @@ black src tests
 isort src tests
 
 # Lint code
-ruff src tests
+ruff check src tests
 
 # Type check
 mypy src

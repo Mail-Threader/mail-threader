@@ -1,5 +1,6 @@
-from loguru import logger
+# from loguru import logger
 import os
+
 
 class Visualization:
     """
@@ -40,12 +41,12 @@ if __name__ == "__main__":
     visualizer = Visualization()
 
     # Load data
-    df = visualizer.load_data()
+    # df = visualizer.load_data()
 
     # Load analysis results
-    analysis_results = visualizer.load_analysis_results()
+    # analysis_results = visualizer.load_analysis_results()
 
     # Create all visualizations
-    visualization_paths = visualizer.visualize_all(df, analysis_results)
+    # visualization_paths = visualizer.visualize_all(df, analysis_results)
 
     print("Done!")

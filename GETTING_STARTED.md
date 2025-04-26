@@ -17,6 +17,7 @@ This guide will help new team members get up and running with the project quickl
 ### Prerequisites
 
 Before you begin, make sure you have the following installed:
+
 - Python 3.9 or higher
 - Git
 
@@ -38,6 +39,7 @@ python -m venv .venv
 Activate the virtual environment:
 
 - On Windows:
+
   ```bash
   .venv\Scripts\activate
   ```
@@ -50,11 +52,13 @@ Activate the virtual environment:
 ### Step 3: Install Dependencies
 
 For regular users:
+
 ```bash
 pip install -r requirements.txt
 ```
 
 For developers (includes development tools):
+
 ```bash
 pip install -e ".[dev]"
 ```
@@ -123,21 +127,25 @@ You can customize the execution with various command-line arguments:
 ### Examples
 
 Run only the data preparation step:
+
 ```bash
 python src/main.py --skip-analysis --skip-visualization --skip-stories
 ```
 
 Run visualization and story development using existing processed data and analysis results:
+
 ```bash
 python src/main.py --skip-data-prep --skip-analysis
 ```
 
 Use a different data directory:
+
 ```bash
 python src/main.py --data-dir /path/to/enron/emails
 ```
 
 You can also run individual modules directly:
+
 ```bash
 python -m src.data_preparation.data_preparation
 python -m src.summarization_classification.summarization_classification
@@ -166,7 +174,7 @@ black src tests
 isort src tests
 
 # Lint code
-ruff src tests
+ruff check src tests
 
 # Type check
 mypy src
@@ -183,11 +191,13 @@ All new code should be accompanied by tests. We use pytest for testing:
 3. Name test functions with the prefix `test_`
 
 Run the tests:
+
 ```bash
 pytest
 ```
 
 Or with coverage:
+
 ```bash
 pytest --cov=src --cov-report=html
 ```
@@ -220,6 +230,7 @@ The project includes a Makefile with several useful commands:
 - `make dev-install`: Install the package in development mode
 
 Example usage:
+
 ```bash
 # Format code and run tests
 make format
@@ -255,6 +266,7 @@ python -m pdb src/main.py
 ### Workflow
 
 1. Create a new branch for your feature or bug fix:
+
    ```bash
    git checkout -b feature/your-feature-name
    ```
@@ -262,16 +274,19 @@ python -m pdb src/main.py
 2. Make your changes and ensure they follow the code style guidelines
 
 3. Run the tests to make sure everything works:
+
    ```bash
    make test
    ```
 
 4. Commit your changes with a descriptive message:
+
    ```bash
    git commit -m "Add feature: your feature description"
    ```
 
 5. Push your branch to the remote repository:
+
    ```bash
    git push origin feature/your-feature-name
    ```

@@ -1,5 +1,6 @@
-from loguru import logger
+# from loguru import logger
 import os
+
 
 class SummarizationClassification:
     """
@@ -29,11 +30,10 @@ class SummarizationClassification:
 
 
 if __name__ == "__main__":
-
     # Create SummarizationClassification instance
     analyzer = SummarizationClassification()
 
     # Analyze emails
-    results = analyzer.analyze_emails()
+    # results = analyzer.analyze_emails()
 
     print("Done!")

@@ -1,5 +1,6 @@
-from loguru import logger
+# from loguru import logger
 import os
+
 
 class StoryDevelopment:
     """
@@ -39,12 +40,12 @@ if __name__ == "__main__":
     story_dev = StoryDevelopment()
 
     # Load data
-    df = story_dev.load_data()
+    # df = story_dev.load_data()
 
     # Load analysis results
-    analysis_results = story_dev.load_analysis_results()
+    # analysis_results = story_dev.load_analysis_results()
 
     # Develop stories
-    results = story_dev.develop_stories(df, analysis_results)
+    # results = story_dev.develop_stories(df, analysis_results)
 
     print("Done!")

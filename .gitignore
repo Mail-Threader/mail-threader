@@ -129,3 +129,6 @@ dmypy.json
 data/
 output/
 extra/
+
+# ruff cache
+.ruff_cache/

@@ -51,7 +51,7 @@ clean-test: ## remove test and coverage artifacts
 	rm -fr .pytest_cache
 
 lint: ## check style with ruff, black, and isort
-	ruff src tests
+	ruff check src tests
 	black --check src tests
 	isort --check-only --profile black src tests
 
