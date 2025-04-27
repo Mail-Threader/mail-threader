@@ -1,3 +1,3 @@
-from .utils import sample_function, safe_get, filter_list
+from .utils import filter_list, safe_get, sample_function
 
-__all__ = ['sample_function', 'safe_get', 'filter_list']
+__all__ = ["sample_function", "safe_get", "filter_list"]

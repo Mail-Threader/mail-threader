@@ -1,7 +1,8 @@
 """
 Utility functions for the Enron Email Analysis Pipeline.
 """
-from typing import Any, Dict, List
+
+from typing import Any, Callable, Dict, List
 
 
 def sample_function(a: int, b: int) -> int:
@@ -33,7 +34,7 @@ def safe_get(data: Dict[str, Any], key: str, default: Any = None) -> Any:
     return data.get(key, default)
 
 
-def filter_list(items: List[Any], condition: callable) -> List[Any]:
+def filter_list(items: List[Any], condition: Callable) -> List[Any]:
     """
     Filter a list based on a condition function.
 

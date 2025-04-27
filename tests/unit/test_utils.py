@@ -1,6 +1,7 @@
 """
 Unit tests for the utils module.
 """
+
 import pytest
 
 from src.utils import filter_list, safe_get, sample_function
