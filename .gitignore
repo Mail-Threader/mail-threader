@@ -179,4 +179,4 @@ yarn-error.log*
 next-env.d.ts
 
 # migration files
-/frontend/migrations
+/frontend/**/migrations
