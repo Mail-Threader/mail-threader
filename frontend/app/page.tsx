@@ -1,58 +1,58 @@
-import Link from "next/link";
-import Image from "next/image";
-import { Button } from "@/components/ui/button";
+import Link from 'next/link';
+import Image from 'next/image';
+import { Button } from '@/components/ui/button';
 import {
 	Card,
 	CardContent,
 	CardHeader,
 	CardTitle,
 	CardDescription,
-} from "@/components/ui/card";
-import { MailThreaderLogo } from "@/components/icons/mail-threader-logo";
+} from '@/components/ui/card';
+import { MailThreaderLogo } from '@/components/icons/mail-threader-logo';
 import {
 	BarChartBigIcon,
 	FileTextIcon,
 	ChevronRightIcon,
 	ShuffleIcon,
 	GitMergeIcon,
-} from "lucide-react";
+} from 'lucide-react';
 
 const features = [
 	{
 		icon: GitMergeIcon,
-		title: "Intelligent Email Threading",
+		title: 'Intelligent Email Threading',
 		description:
-			"Automatically group related emails into coherent threads, making it easy to follow conversations and understand context.",
-		imageSrc: "https://picsum.photos/600/400?random=1",
-		imageHint: "email threads",
-		link: "/dashboard/data-view",
+			'Automatically group related emails into coherent threads, making it easy to follow conversations and understand context.',
+		imageSrc: 'https://picsum.photos/600/400?random=1',
+		imageHint: 'email threads',
+		link: '/dashboard/data-view',
 	},
 	{
 		icon: FileTextIcon,
-		title: "AI-Powered Summarization",
+		title: 'AI-Powered Summarization',
 		description:
-			"Cut through the noise. Our AI condenses lengthy email threads and documents into concise, actionable summaries, highlighting crucial information.",
-		imageSrc: "https://picsum.photos/600/400?random=2",
-		imageHint: "ai document",
-		link: "/dashboard/summarization",
+			'Cut through the noise. Our AI condenses lengthy email threads and documents into concise, actionable summaries, highlighting crucial information.',
+		imageSrc: 'https://picsum.photos/600/400?random=2',
+		imageHint: 'ai document',
+		link: '/dashboard/summarization',
 	},
 	{
 		icon: BarChartBigIcon,
-		title: "Insightful Visualizations",
+		title: 'Insightful Visualizations',
 		description:
-			"Visualize communication patterns, topic clusters, and sentiment trends within your email data using interactive charts and graphs.",
-		imageSrc: "https://picsum.photos/600/400?random=3",
-		imageHint: "charts graph",
-		link: "/dashboard/visualizations",
+			'Visualize communication patterns, topic clusters, and sentiment trends within your email data using interactive charts and graphs.',
+		imageSrc: 'https://picsum.photos/600/400?random=3',
+		imageHint: 'charts graph',
+		link: '/dashboard/visualizations',
 	},
 	{
 		icon: ShuffleIcon,
-		title: "Advanced Data Processing",
+		title: 'Advanced Data Processing',
 		description:
-			"Efficiently process and prepare large email datasets for analysis, with tools for cleaning, filtering, and structuring your data.",
-		imageSrc: "https://picsum.photos/600/400?random=4",
-		imageHint: "data processing",
-		link: "/dashboard/data-view",
+			'Efficiently process and prepare large email datasets for analysis, with tools for cleaning, filtering, and structuring your data.',
+		imageSrc: 'https://picsum.photos/600/400?random=4',
+		imageHint: 'data processing',
+		link: '/dashboard/data-view',
 	},
 ];
 
@@ -66,7 +66,9 @@ export default function LandingPage() {
 				<div className="container flex h-16 items-center max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 					<Link href="/" className="flex items-center gap-2 mr-6">
 						<MailThreaderLogo className="h-7 w-7 text-primary" />
-						<span className="text-xl font-semibold">Mail-Threader</span>
+						<span className="text-xl font-semibold">
+							Mail-Threader
+						</span>
 					</Link>
 					<nav className="flex items-center space-x-2 sm:space-x-4 text-sm font-medium ml-auto">
 						<Button variant="ghost" asChild>
@@ -97,12 +99,17 @@ export default function LandingPage() {
 							</span>
 						</h1>
 						<p className="mt-6 max-w-md mx-auto text-lg text-muted-foreground sm:text-xl md:mt-8 md:max-w-3xl">
-							Mail-Threader helps you make sense of complex email datasets.
-							Intelligently group conversations, summarize key points, and
-							visualize communication patterns.
+							Mail-Threader helps you make sense of complex email
+							datasets. Intelligently group conversations,
+							summarize key points, and visualize communication
+							patterns.
 						</p>
 						<div className="mt-10 max-w-sm mx-auto sm:max-w-none sm:flex sm:justify-center space-y-4 sm:space-y-0 sm:space-x-4">
-							<Button size="lg" asChild className="w-full sm:w-auto">
+							<Button
+								size="lg"
+								asChild
+								className="w-full sm:w-auto"
+							>
 								<Link href="/signup">Get Started for Free</Link>
 							</Button>
 							<Button
@@ -152,7 +159,7 @@ export default function LandingPage() {
 												src={feature.imageSrc}
 												alt={feature.title}
 												fill={true}
-												style={{ objectFit: "cover" }}
+												style={{ objectFit: 'cover' }}
 												data-ai-hint={feature.imageHint}
 											/>
 										</div>
@@ -162,7 +169,8 @@ export default function LandingPage() {
 											className="mt-auto w-full sm:w-auto self-start"
 										>
 											<Link href={feature.link}>
-												Learn More <ChevronRightIcon className="ml-2 h-4 w-4" />
+												Learn More{' '}
+												<ChevronRightIcon className="ml-2 h-4 w-4" />
 											</Link>
 										</Button>
 									</CardContent>
@@ -180,11 +188,12 @@ export default function LandingPage() {
 								Transforming Email Data into Knowledge
 							</h2>
 							<p className="mt-4 max-w-3xl mx-auto text-lg text-muted-foreground">
-								Mail-Threader leverages cutting-edge AI and data processing
-								techniques to transform raw email datasets into structured,
-								analyzable resources. Our platform enables researchers,
-								analysts, and legal professionals to explore email archives with
-								unprecedented ease and depth.
+								Mail-Threader leverages cutting-edge AI and data
+								processing techniques to transform raw email
+								datasets into structured, analyzable resources.
+								Our platform enables researchers, analysts, and
+								legal professionals to explore email archives
+								with unprecedented ease and depth.
 							</p>
 							<div className="mt-10">
 								<Image
@@ -207,8 +216,9 @@ export default function LandingPage() {
 							Ready to Untangle Your Emails?
 						</h2>
 						<p className="mt-4 max-w-2xl mx-auto text-lg text-primary-foreground/80">
-							Sign up today to access the full suite of Mail-Threader tools and
-							start your journey into organized email analysis.
+							Sign up today to access the full suite of
+							Mail-Threader tools and start your journey into
+							organized email analysis.
 						</p>
 						<div className="mt-10 max-w-sm mx-auto sm:max-w-none sm:flex sm:justify-center space-y-4 sm:space-y-0 sm:space-x-4">
 							<Button
@@ -255,7 +265,9 @@ export default function LandingPage() {
 							Features
 						</Link>
 					</div>
-					<p>&copy; {currentYear} Mail-Threader. All rights reserved.</p>
+					<p>
+						&copy; {currentYear} Mail-Threader. All rights reserved.
+					</p>
 					<p className="text-sm mt-2">
 						Unlocking understanding from complex email data.
 					</p>

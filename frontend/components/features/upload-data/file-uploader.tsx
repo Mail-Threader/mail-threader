@@ -1,38 +1,38 @@
-"use client";
+'use client';
 
-import { useState, type DragEvent, type ChangeEvent, useCallback } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { UploadCloudIcon, FileIcon, XIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useToast } from "@/hooks/use-toast";
-import { useRouter } from "next/navigation";
+import { useState, type DragEvent, type ChangeEvent, useCallback } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { UploadCloudIcon, FileIcon, XIcon } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
+import { useRouter } from 'next/navigation';
 
 // Define acceptable file types
 const ACCEPTED_FILE_TYPES = {
-	"text/csv": [".csv"],
-	"message/rfc822": [".eml"],
-	"application/mbox": [".mbox"],
-	"application/octet-stream": [".pkl"], // Common fallback for .pkl, extension check is primary
-	"application/vnd.ms-outlook": [".pst"],
-	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
-		".xlsx",
+	'text/csv': ['.csv'],
+	'message/rfc822': ['.eml'],
+	'application/mbox': ['.mbox'],
+	'application/octet-stream': ['.pkl'], // Common fallback for .pkl, extension check is primary
+	'application/vnd.ms-outlook': ['.pst'],
+	'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': [
+		'.xlsx',
 	],
-	"application/zip": [".zip"],
+	'application/zip': ['.zip'],
 };
 const MAX_FILE_SIZE_MB = 100; // Example: 100MB limit
 
 // Generate the string for the <input accept> attribute
 const acceptAttributeValue = Object.entries(ACCEPTED_FILE_TYPES)
-	.map(([mimeType, extensions]) => extensions.join(",")) // Primarily use extensions for accept
-	.join(",");
+	.map(([mimeType, extensions]) => extensions.join(',')) // Primarily use extensions for accept
+	.join(',');
 
 // Generate the display string for supported types
 const supportedTypesDisplay = Object.values(ACCEPTED_FILE_TYPES)
 	.flat()
 	.map((ext) => ext.substring(1).toUpperCase())
 	.sort()
-	.join(", ");
+	.join(', ');
 
 export function FileUploader() {
 	const [isDragging, setIsDragging] = useState(false);
@@ -66,7 +66,7 @@ export function FileUploader() {
 		}
 
 		const fileName = file.name.toLowerCase();
-		let extension = fileName.split(".").pop();
+		let extension = fileName.split('.').pop();
 
 		if (!extension) {
 			return `File "${file.name}" has no extension and is not supported.`;
@@ -79,7 +79,7 @@ export function FileUploader() {
 			return `File type for "${
 				file.name
 			}" (extension ${extension}) is not supported. Supported types: ${allAcceptedExtensions.join(
-				", "
+				', ',
 			)}.`;
 		}
 		return null;
@@ -100,9 +100,9 @@ export function FileUploader() {
 
 			if (errors.length > 0) {
 				toast({
-					title: "File Validation Error",
-					description: errors.join("\n"),
-					variant: "destructive",
+					title: 'File Validation Error',
+					description: errors.join('\n'),
+					variant: 'destructive',
 				});
 			}
 
@@ -120,64 +120,69 @@ export function FileUploader() {
 	const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
 		processFiles(e.target.files);
 		if (e.target) {
-			e.target.value = ""; // Reset file input to allow re-uploading the same file
+			e.target.value = ''; // Reset file input to allow re-uploading the same file
 		}
 	};
 
 	const removeFile = (index: number) => {
-		setSelectedFiles((prevFiles) => prevFiles.filter((_, i) => i !== index));
+		setSelectedFiles((prevFiles) =>
+			prevFiles.filter((_, i) => i !== index),
+		);
 	};
 
 	const handleUpload = useCallback(async () => {
 		if (selectedFiles.length === 0) {
 			toast({
-				title: "No files selected",
-				description: "Please select files to upload.",
-				variant: "destructive",
+				title: 'No files selected',
+				description: 'Please select files to upload.',
+				variant: 'destructive',
 			});
 			return;
 		}
 
 		toast({
-			title: "Upload Started",
+			title: 'Upload Started',
 			description: `Uploading ${selectedFiles.length} file(s)... (This is a demo)`,
 		});
 
 		await new Promise((resolve) => setTimeout(resolve, 2000));
 
 		toast({
-			title: "Upload Successful",
+			title: 'Upload Successful',
 			description: `${selectedFiles.length} file(s) "uploaded". Redirecting to data view...`,
 		});
 		setSelectedFiles([]);
-		router.push("/dashboard/data-view");
+		router.push('/dashboard/data-view');
 	}, [selectedFiles, toast, router]);
 
 	return (
 		<div className="space-y-6">
 			<div
 				className={cn(
-					"flex flex-col items-center justify-center w-full p-8 border-2 border-dashed rounded-lg cursor-pointer hover:border-primary/70 transition-colors",
-					isDragging ? "border-primary bg-primary/10" : "border-border bg-card"
+					'flex flex-col items-center justify-center w-full p-8 border-2 border-dashed rounded-lg cursor-pointer hover:border-primary/70 transition-colors',
+					isDragging
+						? 'border-primary bg-primary/10'
+						: 'border-border bg-card',
 				)}
 				onDragEnter={handleDragEnter}
 				onDragLeave={handleDragLeave}
 				onDragOver={handleDragOver}
 				onDrop={handleDrop}
-				onClick={() => document.getElementById("fileInput")?.click()}
+				onClick={() => document.getElementById('fileInput')?.click()}
 			>
 				<UploadCloudIcon
 					className={cn(
-						"w-16 h-16 mb-4",
-						isDragging ? "text-primary" : "text-muted-foreground"
+						'w-16 h-16 mb-4',
+						isDragging ? 'text-primary' : 'text-muted-foreground',
 					)}
 				/>
 				<p className="mb-2 text-sm text-muted-foreground">
-					<span className="font-semibold">Click to upload</span> or drag and
-					drop
+					<span className="font-semibold">Click to upload</span> or
+					drag and drop
 				</p>
 				<p className="text-xs text-muted-foreground">
-					Supported: {supportedTypesDisplay}. Max {MAX_FILE_SIZE_MB}MB per file.
+					Supported: {supportedTypesDisplay}. Max {MAX_FILE_SIZE_MB}MB
+					per file.
 				</p>
 				<Input
 					id="fileInput"
@@ -204,7 +209,8 @@ export function FileUploader() {
 										{file.name}
 									</span>
 									<span className="text-xs text-muted-foreground">
-										({(file.size / 1024 / 1024).toFixed(2)} MB)
+										({(file.size / 1024 / 1024).toFixed(2)}{' '}
+										MB)
 									</span>
 								</div>
 								<Button

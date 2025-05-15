@@ -1,33 +1,30 @@
-"use client";
+'use client';
 
-import { useAuthStore } from "@/store/auth-store";
-import { useRouter, usePathname } from "next/navigation";
-import type { ReactNode } from "react";
-import { useEffect } from "react";
-import { Skeleton } from "@/components/ui/skeleton";
+import { useAuthStore } from '@/store/auth-store';
+import { useRouter, usePathname } from 'next/navigation';
+import type { ReactNode } from 'react';
+import { useEffect } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface AuthGuardProps {
 	children: ReactNode;
 }
 
 export function AuthGuard({ children }: AuthGuardProps) {
-	const { isAuthenticated, isLoading } = useAuthStore((state) => ({
-		isAuthenticated: state.isAuthenticated,
-		isLoading: state.isLoading,
-	}));
+	const { isAuthenticated, isLoading } = useAuthStore();
 	const router = useRouter();
 	const pathname = usePathname();
 
 	useEffect(() => {
 		// Wait for session check to complete
 		if (!isLoading) {
-			if (!isAuthenticated && pathname.startsWith("/dashboard")) {
-				router.push("/login");
+			if (!isAuthenticated && pathname.startsWith('/dashboard')) {
+				router.push('/login');
 			}
 		}
 	}, [isAuthenticated, isLoading, router, pathname]);
 
-	if (isLoading && pathname.startsWith("/dashboard")) {
+	if (isLoading && pathname.startsWith('/dashboard')) {
 		// Show a loading state while verifying auth
 		return (
 			<div className="flex flex-col items-center justify-center min-h-screen p-4">
@@ -40,7 +37,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
 	// If not loading and not authenticated on a dashboard route, redirect should have happened or is happening.
 	// Return null to prevent rendering children if redirect is underway.
-	if (!isLoading && !isAuthenticated && pathname.startsWith("/dashboard")) {
+	if (!isLoading && !isAuthenticated && pathname.startsWith('/dashboard')) {
 		return null;
 	}
 

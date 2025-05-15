@@ -1,9 +1,9 @@
-import { create } from "zustand";
-import { checkSessionAction, type CheckSessionResult } from "@/actions/auth";
+import { create } from 'zustand';
+import { checkSessionAction, type CheckSessionResult } from '@/actions/auth';
 
 interface AuthUser {
 	email: string;
-	// Add other user properties if needed, e.g., name, id
+	id: string;
 }
 
 interface AuthState {
@@ -35,7 +35,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 			set({ isLoading: true });
 		}
 		try {
-			const sessionResult: CheckSessionResult = await checkSessionAction();
+			const sessionResult: CheckSessionResult =
+				await checkSessionAction();
 			if (sessionResult.isAuthenticated && sessionResult.user) {
 				set({
 					user: sessionResult.user,
@@ -46,7 +47,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 				set({ user: null, isAuthenticated: false, isLoading: false });
 			}
 		} catch (error) {
-			console.error("Failed to check session:", error);
+			console.error('Failed to check session:', error);
 			set({ user: null, isAuthenticated: false, isLoading: false });
 		}
 	},

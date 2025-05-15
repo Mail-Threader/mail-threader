@@ -1,11 +1,11 @@
-"use client";
+'use client';
 
-import { useAuthStore } from "@/store/auth-store";
-import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { LogOutIcon } from "lucide-react";
-import { logoutAction } from "@/actions/auth";
-import { useToast } from "@/hooks/use-toast";
+import { useAuthStore } from '@/store/auth-store';
+import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { LogOutIcon } from 'lucide-react';
+import { logoutAction } from '@/actions/auth';
+import { useToast } from '@/hooks/use-toast';
 
 export function LogoutButton({ className }: { className?: string }) {
 	const { logout, isAuthenticated } = useAuthStore();
@@ -17,15 +17,15 @@ export function LogoutButton({ className }: { className?: string }) {
 		if (result.success) {
 			logout(); // Update client-side store
 			toast({
-				title: "Logged Out",
-				description: "You have been successfully logged out.",
+				title: 'Logged Out',
+				description: 'You have been successfully logged out.',
 			});
-			router.push("/login");
+			router.push('/login');
 		} else {
 			toast({
-				title: "Logout Failed",
-				description: "Could not log out. Please try again.",
-				variant: "destructive",
+				title: 'Logout Failed',
+				description: 'Could not log out. Please try again.',
+				variant: 'destructive',
 			});
 		}
 	};

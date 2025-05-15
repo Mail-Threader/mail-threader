@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode } from 'react';
 import {
 	SidebarProvider,
 	Sidebar,
@@ -8,12 +8,12 @@ import {
 	SidebarFooter,
 	SidebarInset,
 	SidebarRail,
-} from "@/components/ui/sidebar";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { DashboardNav } from "./dashboard-nav";
-import { MailThreaderLogo } from "@/components/icons/mail-threader-logo";
-import Link from "next/link";
-import { LogoutButton } from "./logout-button";
+} from '@/components/ui/sidebar';
+import { ThemeToggle } from '@/components/theme-toggle';
+import { DashboardNav } from './dashboard-nav';
+import { MailThreaderLogo } from '@/components/icons/mail-threader-logo';
+import Link from 'next/link';
+import { LogoutButton } from './logout-button';
 
 interface DashboardLayoutProps {
 	children: ReactNode;
@@ -29,7 +29,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 				className="border-r"
 			>
 				<SidebarHeader className="flex items-center justify-between p-4">
-					<Link href="/dashboard/data-view" className="flex items-center gap-2">
+					<Link
+						href="/dashboard/data-view"
+						className="flex items-center gap-2"
+					>
 						<MailThreaderLogo className="h-7 w-7 text-primary" />
 						<h1 className="text-lg font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
 							Mail-Threader
@@ -48,7 +51,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 				</SidebarFooter>
 			</Sidebar>
 			<SidebarRail />
-			<SidebarInset className="p-4 sm:p-6 lg:p-8">{children}</SidebarInset>
+			<SidebarInset className="p-4 sm:p-6 lg:p-8">
+				{children}
+			</SidebarInset>
 		</SidebarProvider>
 	);
 }

@@ -105,7 +105,7 @@ export default function SignupPage() {
 										<FormLabel>Email</FormLabel>
 										<FormControl>
 											<Input
-												placeholder="m@example.com"
+												placeholder="john@doe.com"
 												{...field}
 												disabled={isPending}
 											/>
@@ -123,7 +123,7 @@ export default function SignupPage() {
 										<FormControl>
 											<Input
 												type="password"
-												placeholder="••••••••"
+												placeholder="*********"
 												{...field}
 												disabled={isPending}
 											/>
@@ -141,7 +141,7 @@ export default function SignupPage() {
 										<FormControl>
 											<Input
 												type="password"
-												placeholder="••••••••"
+												placeholder="*********"
 												{...field}
 												disabled={isPending}
 											/>

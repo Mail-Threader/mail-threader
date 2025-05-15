@@ -1,58 +1,59 @@
-"use client";
+'use client';
 
-import * as React from "react";
-import { Moon, Sun } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Moon, Sun } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { usePreferencesStore } from "@/store/preferences-store";
+} from '@/components/ui/dropdown-menu';
+import { usePreferencesStore } from '@/store/preferences-store';
+import { useState, useEffect } from 'react';
 
 export function ThemeToggle() {
 	const currentTheme = usePreferencesStore((state) => state.theme);
 	const setThemeInStore = usePreferencesStore((state) => state.setTheme);
-	const [mounted, setMounted] = React.useState(false);
+	const [mounted, setMounted] = useState(false);
 
-	React.useEffect(() => {
+	useEffect(() => {
 		setMounted(true);
 	}, []);
 
-	React.useEffect(() => {
+	useEffect(() => {
 		if (!mounted) return; // Wait for store to be hydrated
 
 		const root = window.document.documentElement;
-		root.classList.remove("theme-light", "dark");
+		root.classList.remove('theme-light', 'dark');
 
-		if (currentTheme === "system") {
-			const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
-				.matches
-				? "dark"
-				: "theme-light";
+		if (currentTheme === 'system') {
+			const systemTheme = window.matchMedia(
+				'(prefers-color-scheme: dark)',
+			).matches
+				? 'dark'
+				: 'theme-light';
 			root.classList.add(systemTheme);
 		} else {
 			root.classList.add(currentTheme);
 		}
 	}, [currentTheme, mounted]);
 
-	React.useEffect(() => {
-		if (!mounted || currentTheme !== "system") {
+	useEffect(() => {
+		if (!mounted || currentTheme !== 'system') {
 			return;
 		}
 
-		const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+		const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 		const handleChange = () => {
 			// This ensures the DOM updates if the system theme changes while 'system' is selected in the app
 			const root = window.document.documentElement;
-			root.classList.remove("theme-light", "dark");
-			const systemTheme = mediaQuery.matches ? "dark" : "theme-light";
+			root.classList.remove('theme-light', 'dark');
+			const systemTheme = mediaQuery.matches ? 'dark' : 'theme-light';
 			root.classList.add(systemTheme);
 		};
 
-		mediaQuery.addEventListener("change", handleChange);
-		return () => mediaQuery.removeEventListener("change", handleChange);
+		mediaQuery.addEventListener('change', handleChange);
+		return () => mediaQuery.removeEventListener('change', handleChange);
 	}, [currentTheme, mounted]);
 
 	if (!mounted) {
@@ -78,13 +79,15 @@ export function ThemeToggle() {
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="end">
-				<DropdownMenuItem onClick={() => setThemeInStore("theme-light")}>
+				<DropdownMenuItem
+					onClick={() => setThemeInStore('theme-light')}
+				>
 					Light
 				</DropdownMenuItem>
-				<DropdownMenuItem onClick={() => setThemeInStore("dark")}>
+				<DropdownMenuItem onClick={() => setThemeInStore('dark')}>
 					Dark
 				</DropdownMenuItem>
-				<DropdownMenuItem onClick={() => setThemeInStore("system")}>
+				<DropdownMenuItem onClick={() => setThemeInStore('system')}>
 					System
 				</DropdownMenuItem>
 			</DropdownMenuContent>
