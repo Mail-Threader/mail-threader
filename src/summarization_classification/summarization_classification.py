@@ -36,6 +36,8 @@ class SummarizationClassification:
             input_dir (str): Directory containing processed email data
             output_dir (str): Directory to store analysis results
         """
+        self.ner_model = spacy.load("en_core_web_sm")
+        
         self.input_dir = input_dir
         self.output_dir = output_dir
 

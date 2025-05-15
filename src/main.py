@@ -181,8 +181,8 @@ def run_summarization_classification(_, dirs, skip=False):
     summary = analyzer.summarize_corpus(df)
     print("Corpus Summary:\n", summary)
     #analyzer.save_to_csv(df, "email_analysis_results.csv")
-    #analyzer.save_to_sqlite(df)
-    analyzer.save_to_json(df, "email_analysis_results.json")
+    analyzer.save_to_sqlite(df)
+    #analyzer.save_to_json(df, "email_analysis_results.json")
 
 def run_visualization(df, analysis_results, dirs, skip=False):
     """
