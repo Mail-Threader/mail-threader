@@ -123,8 +123,11 @@ def run_data_preparation(dirs, skip=False):
         #     logger.warning("No processed data found. Running data preparation step...")
 
     logger.info("Running data preparation step...")
-    data_prep = DataPreparation(input_dir=dirs["data_dir"], output_dir=dirs["processed_data_dir"])
+    data_prep = DataPreparation(
+        input_dir=dirs["data_dir"], output_dir=dirs["processed_data_dir"]
+    )
     df = data_prep.process_all_emails()
+    data_prep.save_to_pickle(df)
     data_prep.save_to_json(df)
     logger.info(f"Processed {len(df)} emails")
     return df

@@ -3,9 +3,10 @@ import json
 import os
 import re
 import time
-
 import dateparser
 from tqdm import tqdm
+import pandas as pd
+import pickle
 
 
 class DataPreparation:
@@ -140,8 +141,8 @@ class DataPreparation:
         if forward_info:
             fwd_data["date"].add(forward_info.group(2).replace("\n", " ").strip())
             fwd_data["from"].add(forward_info.group(1).strip())
-        else:
-            fwd_data["from"] = "can not find"
+        # else:
+        # fwd_data["from"] = "can not find"
 
         # Extract original sender info (original sender and date)
         sender_info = re.search(
@@ -285,8 +286,7 @@ class DataPreparation:
         # Forwarded emails
         for fwd_text in forwards_raw:
             fwd_data1 = {
-                "message_id": next(iter(main_data["message_id"]))
-                              + "forwarded",  # Will be assigned later if possible
+                "message_id": next(iter(main_data["message_id"])) + "forwarded",
                 "original_message_id": main_data["message_id"],
                 "filename": None,
                 "type": "forwarded",
@@ -332,16 +332,16 @@ class DataPreparation:
                     file_path = os.path.join(root, filename)
                     if os.path.isfile(file_path):
                         with open(
-                                file_path, "r", encoding="utf-8", errors="ignore"
+                            file_path, "r", encoding="utf-8", errors="ignore"
                         ) as f:
                             raw_text = f.read()
                             email_data = self.extract_all_emails(raw_text)
                             for email in email_data:
                                 # Only append if essential fields are present
                                 if (
-                                        email.get("from")
-                                        or email.get("to")
-                                        or email.get("subject")
+                                    email.get("from")
+                                    or email.get("to")
+                                    or email.get("subject")
                                 ):
                                     email["filename"] = filename
                                     cleaned_data.append(email)
@@ -377,25 +377,26 @@ class DataPreparation:
 
         return cleaned_data
 
-    def save_to_json(
-            self, data_list
-    ):
+    def save_to_json(self, data_list):
         """Save a list of cleaned email dictionaries to a JSON file, converting sets to lists."""
-        serializable_data_list = []
-        for item in data_list:
-            serializable_item = {}
-            for key, value in item.items():
-                if isinstance(value, set):
-                    serializable_item[key] = "".join(list(value))
-                else:
-                    serializable_item[key] = value
-            serializable_data_list.append(serializable_item)
-
-        with open(self.output_dir + "/data_cleaned.json", "w", encoding="utf-8") as f:
-            json.dump(serializable_data_list, f, indent=2, ensure_ascii=False)
-        print(
-            f"\n✅ Saved {len(serializable_data_list)} cleaned emails to {self.output_dir + "/data_cleaned.json"}"
+        df = pd.DataFrame(data_list)
+        df.to_json(
+            self.output_dir + "/data_cleaned.json",
+            orient="records",
+            indent=2,
+            force_ascii=False,
         )
+        print(
+            f"\n✅ Saved {len(df)} cleaned emails to {self.output_dir + '/data_cleaned.json'}"
+        )
+
+    def save_to_pickle(self, data_list):
+        """Save a list of cleaned email dictionaries to a pickle file."""
+        df = pd.DataFrame(data_list)
+        output_path = self.output_dir + "/data_cleaned.pkl"
+        with open(output_path, "wb") as f:
+            pickle.dump(df, f)
+        print(f"\n✅ Saved {len(df)} cleaned emails to {output_path}")
 
 
 if __name__ == "__main__":
@@ -406,6 +407,6 @@ if __name__ == "__main__":
     # df = data_prep.process_emails()
 
     data = data_prep.process_all_emails()
-    data_prep.save_to_json(data)
+    data_prep.save_to_pickle(data)
 
     print("Done!")
