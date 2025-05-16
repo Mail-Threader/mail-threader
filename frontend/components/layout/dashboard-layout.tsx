@@ -1,25 +1,32 @@
-import type { ReactNode } from 'react';
-import {
-	SidebarProvider,
-	Sidebar,
-	SidebarHeader,
-	SidebarTrigger,
-	SidebarContent,
-	SidebarFooter,
-	SidebarInset,
-	SidebarRail,
-} from '@/components/ui/sidebar';
+import { Fragment, type ReactNode } from 'react';
+// import {
+// 	SidebarProvider,
+// 	Sidebar,
+// 	SidebarHeader,
+// 	SidebarTrigger,
+// 	SidebarContent,
+// 	SidebarFooter,
+// 	SidebarInset,
+// 	SidebarRail,
+// } from '@/components/ui/sidebar';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { DashboardNav } from './dashboard-nav';
 import { MailThreaderLogo } from '@/components/icons/mail-threader-logo';
 import Link from 'next/link';
 import { LogoutButton } from './logout-button';
+import Sidebar from './sidebar';
 
 interface DashboardLayoutProps {
 	children: ReactNode;
 }
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
+	return (
+		<Fragment>
+			<Sidebar>{children}</Sidebar>
+		</Fragment>
+	);
+
 	return (
 		<SidebarProvider defaultOpen={true}>
 			<Sidebar

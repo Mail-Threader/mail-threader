@@ -8,9 +8,10 @@ import { useAuthStore } from '@/store/auth-store';
 import { ThemeToggle } from '../theme-toggle';
 import { LogoutButton } from './logout-button';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
+import { Skeleton } from '../ui/skeleton';
 
 const Nav = () => {
-	const { isAuthenticated, user, checkSession } = useAuthStore();
+	const { isAuthenticated, user, checkSession, isLoading } = useAuthStore();
 
 	useEffect(() => {
 		checkSession();
@@ -26,8 +27,14 @@ const Nav = () => {
 					<MailThreaderLogo className="h-7 w-7 text-primary" />
 					<span className="text-xl font-semibold">Mail-Threader</span>
 				</Link>
-				<nav className="flex items-center gap-2 sm:gap-4 text-sm font-medium ml-auto">
-					{isAuthenticated && user ? (
+				<nav className="flex items-center gap-1 sm:gap-4 text-sm font-medium ml-auto">
+					{isLoading ? (
+						<Fragment>
+							<Skeleton className="h-6 w-6" />
+							<Skeleton className="h-6 w-12" />
+							<Skeleton className="h-6 w-6" />
+						</Fragment>
+					) : isAuthenticated && user ? (
 						<Fragment>
 							<ThemeToggle />
 							<LogoutButton className="group-data-[collapsible=icon]:hidden ml-2 md:group-data-[collapsible=icon]:flex md:group-data-[collapsible=icon]:ml-0" />
