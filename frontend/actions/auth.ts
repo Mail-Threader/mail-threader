@@ -11,7 +11,7 @@ import { NewUser, usersTable } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { compare, genSalt, hash } from 'bcrypt';
 import { cookies } from 'next/headers';
-import { sign, verify } from 'jsonwebtoken';
+import { base64url, EncryptJWT, jwtDecrypt } from 'jose';
 
 const AUTH_COOKIE_NAME = 'auth_session_token';
 
@@ -74,7 +74,14 @@ export async function loginAction(data: LoginFormInputs): Promise<AuthState> {
 
 		const jwtSecret = process.env.JWT_SECRET || 'my_secret_key';
 
-		const jwtToken = sign(sessionTokenObj, jwtSecret);
+		const jwtToken = await new EncryptJWT(sessionTokenObj)
+			.setProtectedHeader({
+				alg: 'dir',
+				enc: 'A128CBC-HS256',
+			})
+			.setIssuedAt()
+			.setExpirationTime('7 days')
+			.encrypt(base64url.decode(jwtSecret));
 
 		const cookieStore = await cookies();
 
@@ -179,7 +186,15 @@ export async function checkSessionAction(): Promise<CheckSessionResult> {
 
 		const jwtSecret = process.env.JWT_SECRET || 'my_secret_key';
 
-		const sessionTokenObj = verify(sessionToken, jwtSecret) as JWT_Token;
+		const { payload } = await jwtDecrypt(
+			sessionToken,
+			base64url.decode(jwtSecret),
+		);
+
+		const sessionTokenObj = {
+			id: payload.id,
+			email: payload.email,
+		} as JWT_Token;
 
 		const existingUser = await db.query.usersTable.findFirst({
 			where: eq(usersTable.email, sessionTokenObj.email),
@@ -190,6 +205,32 @@ export async function checkSessionAction(): Promise<CheckSessionResult> {
 		});
 
 		if (existingUser) {
+			const sessionTokenObj = {
+				id: existingUser.id,
+				email: existingUser.email,
+			};
+
+			const jwtSecret = process.env.JWT_SECRET || 'my_secret_key';
+
+			const jwtToken = await new EncryptJWT(sessionTokenObj)
+				.setProtectedHeader({
+					alg: 'dir',
+					enc: 'A128CBC-HS256',
+				})
+				.setIssuedAt()
+				.setExpirationTime('7 days')
+				.encrypt(base64url.decode(jwtSecret));
+
+			const cookieStore = await cookies();
+
+			cookieStore.set(AUTH_COOKIE_NAME, jwtToken, {
+				httpOnly: true,
+				secure: process.env.NODE_ENV === 'production',
+				maxAge: SESSION_MAX_AGE,
+				path: '/',
+				sameSite: 'lax',
+			});
+
 			return {
 				isAuthenticated: true,
 				user: {
@@ -206,16 +247,6 @@ export async function checkSessionAction(): Promise<CheckSessionResult> {
 		// Clear cookie on error to be safe
 		const cookieStore = await cookies();
 		cookieStore.delete(AUTH_COOKIE_NAME);
-		return { isAuthenticated: false, user: null };
-	}
-}
-
-export async function updateSession() {
-	const cookieStore = await cookies();
-
-	const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-
-	if (!sessionToken) {
 		return { isAuthenticated: false, user: null };
 	}
 }

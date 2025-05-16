@@ -1,8 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
-import { PageTransition } from '@/components/layout/page-transition';
-import { AuthProviderInitializer } from '@/components/auth/auth-provider-initializer';
 import { ReactNode } from 'react';
 
 export const metadata: Metadata = {
@@ -18,9 +16,7 @@ export default function RootLayout({
 	return (
 		<html lang="en" suppressHydrationWarning>
 			<body className={`antialiased font-sans`}>
-				<AuthProviderInitializer>
-					<PageTransition>{children}</PageTransition>
-				</AuthProviderInitializer>
+				{children}
 				<Toaster />
 			</body>
 		</html>
