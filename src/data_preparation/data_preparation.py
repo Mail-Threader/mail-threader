@@ -53,7 +53,7 @@ class DataPreparation:
     def parse_headers_org(self, header_text, main_id):
         """Parses the originals headers into a dictionary."""
         fields = {
-            "message_id_org": main_id + "original",  # we create
+            "original_message_id": main_id + "original",  # we create
             "main_id": main_id,
             "filename": "",
             "date": set(),
@@ -316,12 +316,28 @@ class DataPreparation:
 
     def process_all_emails(self, skip=False):
         """Reads and processes all email files in the given folder and shows progress with stats."""
-        cleaned_data = []
+        data = {
+            "message_id": [],
+            "original_message_id": [],
+            "main_id": [],
+            "filename": [],
+            "type": [],
+            "date": [],
+            "from": [],
+            "X-From": [],
+            "X-To": [],
+            "original_sender": [],
+            "original_Date": [],
+            "to": [],
+            "subject": [],
+            "cc": [],
+            "X-cc": [],
+            "body": [],
+        }
         main_count = 0
         original_count = 0
         forwarded_count = 0
         total_emails = 0
-
         start_time = time.time()
         total_files = sum(len(files) for _, _, files in os.walk(self.input_dir))
         print(f"📂 Looking for files in: {os.path.abspath(self.input_dir)}")
@@ -337,65 +353,70 @@ class DataPreparation:
                             raw_text = f.read()
                             email_data = self.extract_all_emails(raw_text)
                             for email in email_data:
-                                # Only append if essential fields are present
-                                if (
-                                    email.get("from")
-                                    or email.get("to")
-                                    or email.get("subject")
-                                ):
-                                    email["filename"] = filename
-                                    cleaned_data.append(email)
-                                    total_emails += 1
-                                    if email.get("type") == "original":
-                                        original_count += 1
-                                    elif email.get("type") == "forwarded":
-                                        forwarded_count += 1
-                                    elif email.get("type") == "main":
-                                        main_count += 1
-                                else:
-                                    print(
-                                        f"⚠️ Skipping entry due to missing essential header fields: {filename}"
-                                    )
-                        # Update tqdm bar with counts
-                        pbar.set_postfix(
-                            {
-                                "Total": total_emails,
-                                "Original": original_count,
-                                "Forwarded": forwarded_count,
-                                "main": main_count,
-                            }
-                        )
-                        pbar.update(1)
-
+                                # if (
+                                #     email.get("from")
+                                #     or email.get("to")
+                                #     or email.get("subject")
+                                # ):
+                                email["filename"] = filename
+                                for key in data.keys():
+                                    if key in email:
+                                        value = email.get(key)
+                                        if isinstance(value, set):
+                                            data[key].append(
+                                                next(iter(value)) if value else None
+                                            )
+                                        else:
+                                            data[key].append(value)
+                                    else:
+                                        data[key].append(None)
+                                total_emails += 1
+                                if email.get("type") == "original":
+                                    original_count += 1
+                                elif email.get("type") == "forwarded":
+                                    forwarded_count += 1
+                                elif email.get("type") == "main":
+                                    main_count += 1
+                            # else:
+                            #     print(
+                            #         f"⚠️ Skipping entry due to missing essential header fields: {filename}"
+                            #     )
+                    # Update tqdm bar with counts
+                    pbar.set_postfix(
+                        {
+                            "Total": total_emails,
+                            "Original": original_count,
+                            "Forwarded": forwarded_count,
+                            "main": main_count,
+                        }
+                    )
+                    pbar.update(1)
         end_time = time.time()
         elapsed = end_time - start_time
         print(f"\n✅ Done! Total emails: {total_emails}")
         print(
-            f"   Original: {original_count}, Forwarded: {forwarded_count}, main: {main_count}"
+            f"  Original: {original_count}, Forwarded: {forwarded_count}, main: {main_count}"
         )
         print(f"⏱️ Time elapsed: {elapsed:.2f} seconds")
 
-        return cleaned_data
+        df = pd.DataFrame(data)
+        return df
 
-    def save_to_json(self, data_list):
-        """Save a list of cleaned email dictionaries to a JSON file, converting sets to lists."""
-        df = pd.DataFrame(data_list)
+    def save_to_json(self, df):
+        """Save a Pandas DataFrame to a JSON file."""
+        output_path = os.path.join(self.output_dir, "data_cleaned.json")
         df.to_json(
-            self.output_dir + "/data_cleaned.json",
+            output_path,
             orient="records",
             indent=2,
             force_ascii=False,
         )
-        print(
-            f"\n✅ Saved {len(df)} cleaned emails to {self.output_dir + '/data_cleaned.json'}"
-        )
+        print(f"\n✅ Saved {len(df)} rows to {output_path}")
 
-    def save_to_pickle(self, data_list):
-        """Save a list of cleaned email dictionaries to a pickle file."""
-        df = pd.DataFrame(data_list)
+    def save_to_pickle(self, df: pd.DataFrame):
+        """Save a list of cleaned email dataframe to a pickle file."""
         output_path = self.output_dir + "/data_cleaned.pkl"
-        with open(output_path, "wb") as f:
-            pickle.dump(df, f)
+        df.to_pickle(output_path)
         print(f"\n✅ Saved {len(df)} cleaned emails to {output_path}")
 
 
@@ -403,10 +424,8 @@ if __name__ == "__main__":
     # Create a DataPreparation instance
     data_prep = DataPreparation()
 
-    # Process emails
-    # df = data_prep.process_emails()
-
     data = data_prep.process_all_emails()
+    data_prep.save_to_json(data)
     data_prep.save_to_pickle(data)
 
     print("Done!")
