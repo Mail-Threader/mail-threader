@@ -37,12 +37,12 @@ export function LogoutButton({ className }: { className?: string }) {
 	return (
 		<Button
 			variant="ghost"
-			size="icon"
 			onClick={handleLogout}
 			className={className}
 			aria-label="Logout"
 		>
-			<LogOutIcon className="h-5 w-5" />
+			<LogOutIcon />
+			Signout
 			<span className="sr-only">Logout</span>
 		</Button>
 	);

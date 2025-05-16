@@ -6,6 +6,57 @@ import {
 	CardTitle,
 } from '@/components/ui/card';
 import { FileUploader } from '@/components/features/upload-data/file-uploader';
+import { Label } from '@/components/ui/label';
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from '@/components/ui/table';
+
+interface PastUpload {
+	id: string;
+	name: string;
+	uploadDate: string;
+	size: string;
+}
+
+const placeholderPastUploads: PastUpload[] = [
+	{
+		id: 'ds001',
+		name: 'Enron Full Archive (mbox)',
+		uploadDate: '2024-07-15',
+		size: '5.2 GB',
+	},
+	{
+		id: 'ds002',
+		name: 'Q3 Financial Emails (csv)',
+		uploadDate: '2024-07-20',
+		size: '15 MB',
+	},
+	{
+		id: 'ds003',
+		name: 'Project Alpha Comms (zip)',
+		uploadDate: '2024-07-22',
+		size: '120 MB',
+	},
+	{
+		id: 'ds004',
+		name: 'Executive Correspondence (eml)',
+		uploadDate: '2024-07-25',
+		size: '250 MB',
+	},
+];
 
 export default function UploadDataPage() {
 	return (
@@ -36,6 +87,114 @@ export default function UploadDataPage() {
 						No files currently processing. Uploaded files will
 						appear here with their status.
 					</p>
+				</CardContent>
+			</Card>
+
+			<Card>
+				<CardHeader>
+					<CardTitle>Manage and Use Uploaded Datasets</CardTitle>
+					<CardDescription>
+						Select an active dataset for analysis or review your
+						upload history.
+					</CardDescription>
+				</CardHeader>
+				<CardContent className="space-y-6">
+					{/* Part 1: Select Active Dataset */}
+					<div className="space-y-2">
+						<Label
+							htmlFor="active-dataset-select"
+							className="text-base font-medium"
+						>
+							Active Dataset for Dashboard
+						</Label>
+						<div className="flex flex-col sm:flex-row sm:items-center gap-2">
+							<Select>
+								<SelectTrigger
+									id="active-dataset-select"
+									className="sm:flex-grow"
+								>
+									<SelectValue placeholder="Choose a dataset to make active" />
+								</SelectTrigger>
+								<SelectContent>
+									{placeholderPastUploads.map((upload) => (
+										<SelectItem
+											key={upload.id}
+											value={upload.id}
+										>
+											{upload.name} (Uploaded:{' '}
+											{upload.uploadDate})
+										</SelectItem>
+									))}
+									{placeholderPastUploads.length === 0 && (
+										<SelectItem value="no-data" disabled>
+											No past uploads available
+										</SelectItem>
+									)}
+								</SelectContent>
+							</Select>
+							<Button
+								className="w-full sm:w-auto flex-shrink-0"
+								disabled={placeholderPastUploads.length === 0}
+							>
+								Load Selected Dataset
+							</Button>
+						</div>
+					</div>
+
+					{/* Part 2: Upload History Table */}
+					<div>
+						<h3 className="text-lg font-semibold mb-3">
+							Upload History
+						</h3>
+						<div className="rounded-md border">
+							<Table>
+								<TableHeader>
+									<TableRow>
+										<TableHead>Dataset Name</TableHead>
+										<TableHead>Upload Date</TableHead>
+										<TableHead>Size</TableHead>
+										<TableHead className="text-right">
+											Actions
+										</TableHead>
+									</TableRow>
+								</TableHeader>
+								<TableBody>
+									{placeholderPastUploads.length > 0 ? (
+										placeholderPastUploads.map((upload) => (
+											<TableRow key={upload.id}>
+												<TableCell className="font-medium">
+													{upload.name}
+												</TableCell>
+												<TableCell>
+													{upload.uploadDate}
+												</TableCell>
+												<TableCell>
+													{upload.size}
+												</TableCell>
+												<TableCell className="text-right">
+													<Button
+														variant="outline"
+														size="sm"
+													>
+														Details
+													</Button>
+												</TableCell>
+											</TableRow>
+										))
+									) : (
+										<TableRow>
+											<TableCell
+												colSpan={4}
+												className="h-24 text-center text-muted-foreground"
+											>
+												No past uploads found.
+											</TableCell>
+										</TableRow>
+									)}
+								</TableBody>
+							</Table>
+						</div>
+					</div>
 				</CardContent>
 			</Card>
 		</div>

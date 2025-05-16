@@ -13,12 +13,17 @@ import {
 	BarChartBigIcon,
 	BookOpenTextIcon,
 	UploadCloudIcon,
+	UserCogIcon, // Or UserCircle2Icon, Settings2Icon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
 	{ href: '/dashboard/data-view', label: 'Data View', icon: TableIcon },
-
+	{
+		href: '/dashboard/upload-data',
+		label: 'Upload Data',
+		icon: UploadCloudIcon,
+	},
 	{
 		href: '/dashboard/summarization',
 		label: 'Summarization',
@@ -35,9 +40,9 @@ const navItems = [
 		icon: BookOpenTextIcon,
 	},
 	{
-		href: '/dashboard/upload-data',
-		label: 'Upload Data',
-		icon: UploadCloudIcon,
+		href: '/dashboard/account',
+		label: 'Account Settings',
+		icon: UserCogIcon,
 	},
 ];
 
@@ -70,7 +75,7 @@ export function DashboardNav() {
 									: 'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
 							)}
 						>
-							<div className="flex items-center gap-2">
+							<div>
 								<item.icon className="h-5 w-5" />
 								<span>{item.label}</span>
 							</div>

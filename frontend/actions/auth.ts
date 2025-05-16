@@ -5,17 +5,14 @@ import {
 	signupSchema,
 	type LoginFormInputs,
 	type SignupFormInputs,
-} from '@/schemas/auth-schemas';
+} from '@/schemas/validation-schemas';
 import { db } from '@/db';
 import { NewUser, usersTable } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { compare, genSalt, hash } from 'bcrypt';
 import { cookies } from 'next/headers';
 import { base64url, EncryptJWT, jwtDecrypt } from 'jose';
-
-const AUTH_COOKIE_NAME = 'auth_session_token';
-
-const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
+import { AUTH_COOKIE_NAME, SESSION_MAX_AGE } from '@/lib/utils';
 
 export interface AuthState {
 	success: boolean;
@@ -170,9 +167,23 @@ export async function logoutAction(): Promise<{ success: boolean }> {
 	}
 }
 
+interface ExtendedJWT_token extends JWT_Token {
+	createdAt: Date | null;
+	updatedAt: Date | null;
+	password: string;
+}
+
 export interface CheckSessionResult {
 	isAuthenticated: boolean;
-	user: JWT_Token | null;
+	user: ExtendedJWT_token | null;
+}
+
+export async function checkIfUpdateReq(exp: number | undefined) {
+	if (!exp) return false;
+	const dayBefExp = new Date(exp * 1000);
+	dayBefExp.setDate(dayBefExp.getDate() - 1);
+	const currDate = new Date();
+	return currDate >= dayBefExp ? true : false;
 }
 
 export async function checkSessionAction(): Promise<CheckSessionResult> {
@@ -201,6 +212,9 @@ export async function checkSessionAction(): Promise<CheckSessionResult> {
 			columns: {
 				email: true,
 				id: true,
+				createdAt: true,
+				updatedAt: true,
+				password: true,
 			},
 		});
 
@@ -210,32 +224,39 @@ export async function checkSessionAction(): Promise<CheckSessionResult> {
 				email: existingUser.email,
 			};
 
-			const jwtSecret = process.env.JWT_SECRET || 'my_secret_key';
+			const isUpdateReq = await checkIfUpdateReq(payload.exp);
 
-			const jwtToken = await new EncryptJWT(sessionTokenObj)
-				.setProtectedHeader({
-					alg: 'dir',
-					enc: 'A128CBC-HS256',
-				})
-				.setIssuedAt()
-				.setExpirationTime('7 days')
-				.encrypt(base64url.decode(jwtSecret));
+			if (isUpdateReq) {
+				const jwtSecret = process.env.JWT_SECRET || 'my_secret_key';
 
-			const cookieStore = await cookies();
+				const jwtToken = await new EncryptJWT(sessionTokenObj)
+					.setProtectedHeader({
+						alg: 'dir',
+						enc: 'A128CBC-HS256',
+					})
+					.setIssuedAt()
+					.setExpirationTime('7 days')
+					.encrypt(base64url.decode(jwtSecret));
 
-			cookieStore.set(AUTH_COOKIE_NAME, jwtToken, {
-				httpOnly: true,
-				secure: process.env.NODE_ENV === 'production',
-				maxAge: SESSION_MAX_AGE,
-				path: '/',
-				sameSite: 'lax',
-			});
+				const cookieStore = await cookies();
+
+				cookieStore.set(AUTH_COOKIE_NAME, jwtToken, {
+					httpOnly: true,
+					secure: process.env.NODE_ENV === 'production',
+					maxAge: SESSION_MAX_AGE,
+					path: '/',
+					sameSite: 'lax',
+				});
+			}
 
 			return {
 				isAuthenticated: true,
 				user: {
 					id: existingUser.id,
 					email: existingUser.email,
+					createdAt: existingUser.createdAt,
+					updatedAt: existingUser.updatedAt,
+					password: existingUser.password,
 				},
 			};
 		}

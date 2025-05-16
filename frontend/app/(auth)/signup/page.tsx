@@ -2,7 +2,6 @@
 
 import { Button } from '@/components/ui/button';
 import {
-	Card,
 	CardContent,
 	CardDescription,
 	CardFooter,
@@ -23,10 +22,13 @@ import {
 import { MailThreaderLogo } from '@/components/icons/mail-threader-logo';
 import { signupAction } from '@/actions/auth';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { signupSchema, type SignupFormInputs } from '@/schemas/auth-schemas';
+import {
+	signupSchema,
+	type SignupFormInputs,
+} from '@/schemas/validation-schemas';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { Fragment, useState, useTransition } from 'react';
 
 export default function SignupPage() {
 	const { toast } = useToast();
@@ -76,102 +78,98 @@ export default function SignupPage() {
 	};
 
 	return (
-		<div className="flex min-h-screen items-center justify-center bg-background p-4">
-			<Card className="w-full max-w-md shadow-xl">
-				<CardHeader className="space-y-1 text-center">
-					<div className="flex justify-center items-center mb-4">
-						<MailThreaderLogo className="h-10 w-10 text-primary" />
-					</div>
-					<CardTitle className="text-2xl">
-						Create an Account
-					</CardTitle>
-					<CardDescription>
-						Enter your details to get started with Mail-Threader.
-					</CardDescription>
-				</CardHeader>
-				<Form {...form}>
-					<form onSubmit={form.handleSubmit(onSubmit)}>
-						<CardContent className="space-y-4">
-							{formError && (
-								<div className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
-									{formError}
-								</div>
+		<Fragment>
+			<CardHeader className="space-y-1 text-center">
+				<div className="flex justify-center items-center mb-4">
+					<MailThreaderLogo className="h-10 w-10 text-primary" />
+				</div>
+				<CardTitle className="text-2xl">Create an Account</CardTitle>
+				<CardDescription>
+					Enter your details to get started with Mail-Threader.
+				</CardDescription>
+			</CardHeader>
+			<Form {...form}>
+				<form onSubmit={form.handleSubmit(onSubmit)}>
+					<CardContent className="space-y-4">
+						{formError && (
+							<div className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
+								{formError}
+							</div>
+						)}
+						<FormField
+							control={form.control}
+							name="email"
+							render={({ field }) => (
+								<FormItem>
+									<FormLabel>Email</FormLabel>
+									<FormControl>
+										<Input
+											placeholder="john@doe.com"
+											{...field}
+											disabled={isPending}
+										/>
+									</FormControl>
+									<FormMessage />
+								</FormItem>
 							)}
-							<FormField
-								control={form.control}
-								name="email"
-								render={({ field }) => (
-									<FormItem>
-										<FormLabel>Email</FormLabel>
-										<FormControl>
-											<Input
-												placeholder="john@doe.com"
-												{...field}
-												disabled={isPending}
-											/>
-										</FormControl>
-										<FormMessage />
-									</FormItem>
-								)}
-							/>
-							<FormField
-								control={form.control}
-								name="password"
-								render={({ field }) => (
-									<FormItem>
-										<FormLabel>Password</FormLabel>
-										<FormControl>
-											<Input
-												type="password"
-												placeholder="*********"
-												{...field}
-												disabled={isPending}
-											/>
-										</FormControl>
-										<FormMessage />
-									</FormItem>
-								)}
-							/>
-							<FormField
-								control={form.control}
-								name="confirmPassword"
-								render={({ field }) => (
-									<FormItem>
-										<FormLabel>Confirm Password</FormLabel>
-										<FormControl>
-											<Input
-												type="password"
-												placeholder="*********"
-												{...field}
-												disabled={isPending}
-											/>
-										</FormControl>
-										<FormMessage />
-									</FormItem>
-								)}
-							/>
-						</CardContent>
-						<CardFooter className="flex flex-col gap-4">
-							<Button
-								type="submit"
-								className="w-full"
-								disabled={isPending}
+						/>
+						<FormField
+							control={form.control}
+							name="password"
+							render={({ field }) => (
+								<FormItem>
+									<FormLabel>Password</FormLabel>
+									<FormControl>
+										<Input
+											type="password"
+											placeholder="*********"
+											{...field}
+											disabled={isPending}
+										/>
+									</FormControl>
+									<FormMessage />
+								</FormItem>
+							)}
+						/>
+						<FormField
+							control={form.control}
+							name="confirmPassword"
+							render={({ field }) => (
+								<FormItem>
+									<FormLabel>Confirm Password</FormLabel>
+									<FormControl>
+										<Input
+											type="password"
+											placeholder="*********"
+											{...field}
+											disabled={isPending}
+										/>
+									</FormControl>
+									<FormMessage />
+								</FormItem>
+							)}
+						/>
+					</CardContent>
+					<CardFooter className="flex flex-col gap-4">
+						<Button
+							type="submit"
+							className="w-full"
+							disabled={isPending}
+						>
+							{isPending ? 'Signing up...' : 'Sign Up'}
+						</Button>
+						<p className="text-center text-sm text-muted-foreground">
+							Already have an account?{' '}
+							<Link
+								href="/login"
+								className="font-semibold text-primary hover:underline"
 							>
-								{isPending ? 'Signing up...' : 'Sign Up'}
-							</Button>
-							<p className="text-center text-sm text-muted-foreground">
-								Already have an account?{' '}
-								<Link
-									href="/login"
-									className="font-semibold text-primary hover:underline"
-								>
-									Login
-								</Link>
-							</p>
-						</CardFooter>
-					</form>
-				</Form>
-			</Card>
-		</div>
+								Login
+							</Link>
+						</p>
+					</CardFooter>
+				</form>
+			</Form>
+		</Fragment>
 	);
 }

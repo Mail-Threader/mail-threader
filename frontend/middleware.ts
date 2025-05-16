@@ -4,6 +4,7 @@ import { db } from './db';
 import { usersTable } from './db/schema';
 import { eq } from 'drizzle-orm';
 import { base64url, EncryptJWT, jwtDecrypt } from 'jose';
+import { checkIfUpdateReq } from './actions/auth';
 
 type JWT_Token = {
 	id: string;
@@ -51,16 +52,20 @@ export async function middleware(request: NextRequest) {
 			return NextResponse.redirect(new URL('/login', request.url));
 		}
 
-		const jwtToken = await new EncryptJWT(sessionTokenObj)
-			.setProtectedHeader({
-				alg: 'dir',
-				enc: 'A128CBC-HS256',
-			})
-			.setIssuedAt()
-			.setExpirationTime('7 days')
-			.encrypt(base64url.decode(jwtSecret));
+		const isUpdateReq = await checkIfUpdateReq(payload.exp);
 
-		request.cookies.set(AUTH_COOKIE_NAME, jwtToken);
+		if (isUpdateReq) {
+			const jwtToken = await new EncryptJWT(sessionTokenObj)
+				.setProtectedHeader({
+					alg: 'dir',
+					enc: 'A128CBC-HS256',
+				})
+				.setIssuedAt()
+				.setExpirationTime('7 days')
+				.encrypt(base64url.decode(jwtSecret));
+
+			request.cookies.set(AUTH_COOKIE_NAME, jwtToken);
+		}
 
 		return NextResponse.next();
 	} catch (error) {

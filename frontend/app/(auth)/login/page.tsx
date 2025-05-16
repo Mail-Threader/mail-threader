@@ -2,7 +2,6 @@
 
 import { Button } from '@/components/ui/button';
 import {
-	Card,
 	CardContent,
 	CardDescription,
 	CardFooter,
@@ -23,10 +22,13 @@ import {
 import { MailThreaderLogo } from '@/components/icons/mail-threader-logo';
 import { loginAction, type AuthState } from '@/actions/auth';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { loginSchema, type LoginFormInputs } from '@/schemas/auth-schemas';
+import {
+	loginSchema,
+	type LoginFormInputs,
+} from '@/schemas/validation-schemas';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { Fragment, useState, useTransition } from 'react';
 import { useAuthStore } from '@/store/auth-store';
 
 export default function LoginPage() {
@@ -90,84 +92,82 @@ export default function LoginPage() {
 	};
 
 	return (
-		<div className="flex min-h-screen items-center justify-center bg-background p-4">
-			<Card className="w-full max-w-md shadow-xl">
-				<CardHeader className="space-y-1 text-center">
-					<div className="flex justify-center items-center mb-4">
-						<MailThreaderLogo className="h-10 w-10 text-primary" />
-					</div>
-					<CardTitle className="text-2xl">
-						Login to Mail-Threader
-					</CardTitle>
-					<CardDescription>
-						Enter your email and password to access your account.
-					</CardDescription>
-				</CardHeader>
-				<Form {...form}>
-					<form onSubmit={form.handleSubmit(onSubmit)}>
-						<CardContent className="space-y-4">
-							{formError && (
-								<div className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
-									{formError}
-								</div>
+		<Fragment>
+			<CardHeader className="space-y-1 text-center">
+				<div className="flex justify-center items-center mb-4">
+					<MailThreaderLogo className="h-10 w-10 text-primary" />
+				</div>
+				<CardTitle className="text-2xl">
+					Login to Mail-Threader
+				</CardTitle>
+				<CardDescription>
+					Enter your email and password to access your account.
+				</CardDescription>
+			</CardHeader>
+			<Form {...form}>
+				<form onSubmit={form.handleSubmit(onSubmit)}>
+					<CardContent className="space-y-4">
+						{formError && (
+							<div className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
+								{formError}
+							</div>
+						)}
+						<FormField
+							control={form.control}
+							name="email"
+							render={({ field }) => (
+								<FormItem>
+									<FormLabel>Email</FormLabel>
+									<FormControl>
+										<Input
+											placeholder="john@doe.com"
+											{...field}
+											disabled={isPending}
+										/>
+									</FormControl>
+									<FormMessage />
+								</FormItem>
 							)}
-							<FormField
-								control={form.control}
-								name="email"
-								render={({ field }) => (
-									<FormItem>
-										<FormLabel>Email</FormLabel>
-										<FormControl>
-											<Input
-												placeholder="john@doe.com"
-												{...field}
-												disabled={isPending}
-											/>
-										</FormControl>
-										<FormMessage />
-									</FormItem>
-								)}
-							/>
-							<FormField
-								control={form.control}
-								name="password"
-								render={({ field }) => (
-									<FormItem>
-										<FormLabel>Password</FormLabel>
-										<FormControl>
-											<Input
-												type="password"
-												placeholder="*********"
-												{...field}
-												disabled={isPending}
-											/>
-										</FormControl>
-										<FormMessage />
-									</FormItem>
-								)}
-							/>
-						</CardContent>
-						<CardFooter className="flex flex-col gap-4">
-							<Button
-								type="submit"
-								className="w-full"
-								disabled={isPending}
+						/>
+						<FormField
+							control={form.control}
+							name="password"
+							render={({ field }) => (
+								<FormItem>
+									<FormLabel>Password</FormLabel>
+									<FormControl>
+										<Input
+											type="password"
+											placeholder="*********"
+											{...field}
+											disabled={isPending}
+										/>
+									</FormControl>
+									<FormMessage />
+								</FormItem>
+							)}
+						/>
+					</CardContent>
+					<CardFooter className="flex flex-col gap-4">
+						<Button
+							type="submit"
+							className="w-full"
+							disabled={isPending}
+						>
+							{isPending ? 'Logging in...' : 'Login'}
+						</Button>
+						<p className="text-center text-sm text-muted-foreground">
+							Don&apos;t have an account?{' '}
+							<Link
+								href="/signup"
+								className="font-semibold text-primary hover:underline"
 							>
-								{isPending ? 'Logging in...' : 'Login'}
-							</Button>
-							<p className="text-center text-sm text-muted-foreground">
-								Don&apos;t have an account?{' '}
-								<Link
-									href="/signup"
-									className="font-semibold text-primary hover:underline"
-								>
-									Sign up
-								</Link>
-							</p>
-						</CardFooter>
-					</form>
-				</Form>
-			</Card>
-		</div>
+								Sign up
+							</Link>
+						</p>
+					</CardFooter>
+				</form>
+			</Form>
+		</Fragment>
 	);
 }
