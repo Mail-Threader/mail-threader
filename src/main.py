@@ -54,8 +54,28 @@ def parse_arguments():
 
     return parser.parse_args()
 
-
 def setup_directories(args):
+    root = os.getcwd()
+
+    processed_data_dir = os.path.join(root, "src", "data_preparation")  # point to where the file actually is
+    analysis_results_dir = os.path.join(args.output_dir, "analysis_results")
+    visualizations_dir = os.path.join(args.output_dir, "visualizations")
+    stories_dir = os.path.join(args.output_dir, "stories")
+
+    for directory in [analysis_results_dir, visualizations_dir, stories_dir]:
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
+    return {
+        "data_dir": args.data_dir,
+        "output_dir": args.output_dir,
+        "processed_data_dir": processed_data_dir,
+        "analysis_results_dir": analysis_results_dir,
+        "visualizations_dir": visualizations_dir,
+        "stories_dir": stories_dir,
+    }
+
+#def setup_directories(args):
     """
     Set up the directory structure for the pipeline.
 
@@ -74,7 +94,7 @@ def setup_directories(args):
 
     # Create subdirectories for each step
     processed_data_dir = os.path.join(args.output_dir, "processed_data")
-    analysis_results_dir = os.path.join(args.output_dir, "analysis_results")
+    analysis_results_dir = os.path.join(args.output_dir, "summarization_results")
     visualizations_dir = os.path.join(args.output_dir, "visualizations")
     stories_dir = os.path.join(args.output_dir, "stories")
 
@@ -133,44 +153,46 @@ def run_data_preparation(dirs, skip=False):
     return df
 
 
-def run_summarization_classification(df, dirs, skip=False):
+def run_summarization_classification(_, dirs, skip=False):
     """
     Run the summarization and classification step.
 
     Args:
-        df (pandas.DataFrame): Processed email data
-        dirs (dict): Dictionary containing directory paths
-        skip (bool): Whether to skip this step
+        _ (pandas.DataFrame): Unused input to match interface.
+        dirs (dict): Dictionary containing directory paths.
+        skip (bool): Whether to skip this step.
 
     Returns:
-        dict: Analysis results
+        dict: Dictionary containing analysis results.
     """
     if skip:
         logger.info("Skipping summarization and classification step...")
-        # Try to load existing analysis results
-        SummarizationClassification(
-            input_dir=dirs["processed_data_dir"],
-            output_dir=dirs["analysis_results_dir"],
-        )
-        # try:
-        #     analysis_results = analyzer.load_data(
-        #         os.path.join(dirs["analysis_results_dir"], "analysis_results.pkl")
-        #     )
-        #     logger.info("Loaded existing analysis results")
-        #     return analysis_results
-        # except FileNotFoundError:
-        #     logger.warning(
-        #         "No analysis results found. Running summarization and classification step..."
-        #     )
+        return
 
     logger.info("Running summarization and classification step...")
-    SummarizationClassification(
-        input_dir=dirs["processed_data_dir"], output_dir=dirs["analysis_results_dir"]
-    )
-    # analysis_results = analyzer.analyze_emails(df)
-    # logger.info("Completed summarization and classification")
-    # return analysis_results
 
+    analyzer = SummarizationClassification(
+        input_dir=dirs["processed_data_dir"],
+        output_dir=dirs["analysis_results_dir"]
+    )
+
+    df = analyzer.load_json_emails("clean_emails.json")
+    df = analyzer.clean_text_column(df)
+    df = analyzer.tokenize_column(df, text_column="clean_body")
+    X, vectorizer = analyzer.vectorize_document(df["clean_body"])
+    model, labels = analyzer.cluster_documents(X, method="kmeans", n_clusters=5)
+    df["cluster"] = labels
+    topics = analyzer.generate_cluster_topics(df["clean_body"], labels, X, vectorizer)
+    print("Cluster Topics:", topics)
+    top_words = analyzer.extract_top_words(X, vectorizer)
+    print("Top overall words:", top_words)
+    df = analyzer.extract_entities(df)
+    df = analyzer.analyze_sentiment(df)
+    summary = analyzer.summarize_corpus(df)
+    print("Corpus Summary:\n", summary)
+    #analyzer.save_to_csv(df, "email_analysis_results.csv")
+    analyzer.save_to_sqlite(df)
+    #analyzer.save_to_json(df, "email_analysis_results.json")
 
 def run_visualization(df, analysis_results, dirs, skip=False):
     """
