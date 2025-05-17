@@ -7,6 +7,7 @@ import dateparser
 from tqdm import tqdm
 import pandas as pd
 import pickle
+from datetime import datetime
 
 
 class DataPreparation:
@@ -404,7 +405,8 @@ class DataPreparation:
 
     def save_to_json(self, df):
         """Save a Pandas DataFrame to a JSON file."""
-        output_path = os.path.join(self.output_dir, "data_cleaned.json")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_path = os.path.join(self.output_dir, f"processed_data_{timestamp}.json")
         df.to_json(
             output_path,
             orient="records",
@@ -415,7 +417,8 @@ class DataPreparation:
 
     def save_to_pickle(self, df: pd.DataFrame):
         """Save a list of cleaned email dataframe to a pickle file."""
-        output_path = self.output_dir + "/data_cleaned.pkl"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_path = os.path.join(self.output_dir, f"processed_data_{timestamp}.pkl")
         df.to_pickle(output_path)
         print(f"\n✅ Saved {len(df)} cleaned emails to {output_path}")
 
