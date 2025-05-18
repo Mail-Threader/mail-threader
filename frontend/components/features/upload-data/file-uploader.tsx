@@ -3,31 +3,30 @@
 import { useState, type DragEvent, type ChangeEvent, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { UploadCloudIcon, FileIcon, XIcon } from 'lucide-react';
+import { UploadCloudIcon, FileIcon, XIcon, Loader2Icon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient';
+import { useAuthStore } from '@/store/auth-store';
 
 // Define acceptable file types
 const ACCEPTED_FILE_TYPES = {
 	'text/csv': ['.csv'],
-	'message/rfc822': ['.eml'],
-	'application/mbox': ['.mbox'],
-	'application/octet-stream': ['.pkl'], // Common fallback for .pkl, extension check is primary
+	'application/octet-stream': ['.pkl'],
 	'application/vnd.ms-outlook': ['.pst'],
 	'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': [
 		'.xlsx',
 	],
 	'application/zip': ['.zip'],
 };
-const MAX_FILE_SIZE_MB = 100; // Example: 100MB limit
+const MAX_FILE_SIZE_MB = 100;
+const SUPABASE_BUCKET_NAME = 'dev-data'; // Define your bucket name
 
-// Generate the string for the <input accept> attribute
-const acceptAttributeValue = Object.entries(ACCEPTED_FILE_TYPES)
-	.map(([mimeType, extensions]) => extensions.join(',')) // Primarily use extensions for accept
+const acceptAttributeValue = Object.values(ACCEPTED_FILE_TYPES)
+	.flat()
 	.join(',');
 
-// Generate the display string for supported types
 const supportedTypesDisplay = Object.values(ACCEPTED_FILE_TYPES)
 	.flat()
 	.map((ext) => ext.substring(1).toUpperCase())
@@ -37,8 +36,10 @@ const supportedTypesDisplay = Object.values(ACCEPTED_FILE_TYPES)
 export function FileUploader() {
 	const [isDragging, setIsDragging] = useState(false);
 	const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+	const [isUploading, setIsUploading] = useState(false);
 	const { toast } = useToast();
 	const router = useRouter();
+	const { user } = useAuthStore();
 
 	const handleDragEnter = (e: DragEvent<HTMLDivElement>) => {
 		e.preventDefault();
@@ -120,7 +121,7 @@ export function FileUploader() {
 	const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
 		processFiles(e.target.files);
 		if (e.target) {
-			e.target.value = ''; // Reset file input to allow re-uploading the same file
+			e.target.value = '';
 		}
 	};
 
@@ -140,20 +141,128 @@ export function FileUploader() {
 			return;
 		}
 
+		setIsUploading(true);
 		toast({
-			title: 'Upload Started',
-			description: `Uploading ${selectedFiles.length} file(s)... (This is a demo)`,
+			title: 'Upload In Progress',
+			description: `Uploading ${selectedFiles.length} file(s) to Supabase...`,
 		});
 
-		await new Promise((resolve) => setTimeout(resolve, 2000));
+		const uploadPromises = selectedFiles.map(async (file) => {
+			// Sanitize email to use as a folder name, or use a user ID if available
+			// For simplicity, using email here. Replace with a proper user ID in production.
+			const userFolder = user?.id
+				? user.id.replace(/[^a-zA-Z0-9]/g, '_')
+				: 'anonymous';
+			const filePath = `${userFolder}/${Date.now()}_${file.name}`; // Add timestamp to avoid overwrites
 
-		toast({
-			title: 'Upload Successful',
-			description: `${selectedFiles.length} file(s) "uploaded". Redirecting to data view...`,
+			// const {} = await supabase.storage
+
+			// check if the bucket exists with getBucket
+			const { data: bucketData, error: bucketError } =
+				await supabase.storage.getBucket(SUPABASE_BUCKET_NAME);
+
+			console.log({
+				bucketData,
+				bucketError,
+			});
+
+			if (bucketError) {
+				console.error('Error fetching bucket:', bucketError);
+				toast({
+					title: 'Bucket Error',
+					description: 'Could not access the storage bucket.',
+					variant: 'destructive',
+				});
+				return;
+			}
+
+			if (!bucketData) {
+				console.error('Bucket not found:', SUPABASE_BUCKET_NAME);
+				toast({
+					title: 'Bucket Not Found',
+					description: 'The specified storage bucket does not exist.',
+					variant: 'destructive',
+				});
+
+				// create the bucket if it doesn't exist
+				const { error: createBucketError } =
+					await supabase.storage.createBucket(SUPABASE_BUCKET_NAME, {
+						public: false,
+					});
+
+				if (createBucketError) {
+					console.error('Error creating bucket:', createBucketError);
+					toast({
+						title: 'Bucket Creation Error',
+						description: 'Could not create the storage bucket.',
+						variant: 'destructive',
+					});
+					return;
+				}
+			}
+
+			const { data, error } = await supabase.storage
+				.from(SUPABASE_BUCKET_NAME)
+				.upload(filePath, file, {
+					cacheControl: '3600',
+					upsert: false, // Set to true if you want to overwrite files with the same name
+				});
+
+			if (error) {
+				console.error(`Error uploading ${file.name}:`, error);
+				return {
+					success: false,
+					name: file.name,
+					error: error.message,
+				};
+			}
+			console.log(`Successfully uploaded ${file.name}:`, data);
+			return { success: true, name: file.name };
 		});
-		setSelectedFiles([]);
-		router.push('/dashboard/data-view');
-	}, [selectedFiles, toast, router]);
+
+		try {
+			const results = await Promise.all(uploadPromises);
+
+			const successfulUploads = results.filter((r) => r && r.success);
+			const failedUploads = results.filter((r) => r && !r.success);
+
+			if (failedUploads.length > 0) {
+				toast({
+					title: 'Upload Partially Failed',
+					description: `Failed to upload ${
+						failedUploads.length
+					} file(s): ${failedUploads
+						.map((f) => f && f.name)
+						.join(', ')}.`,
+					variant: 'destructive',
+				});
+			}
+
+			if (successfulUploads.length > 0) {
+				toast({
+					title: 'Upload Successful',
+					description: `${
+						successfulUploads.length
+					} file(s) uploaded to Supabase. ${
+						failedUploads.length > 0 ? 'Some files failed.' : ''
+					}`,
+				});
+			}
+
+			setSelectedFiles([]); // Clear selection after upload attempt
+			// Potentially redirect or update UI, e.g., refresh the list of past uploads if it were dynamic
+			// router.push('/dashboard/data-view'); // Kept original redirect for now
+		} catch (error) {
+			console.error('General upload error:', error);
+			toast({
+				title: 'Upload Error',
+				description: 'An unexpected error occurred during upload.',
+				variant: 'destructive',
+			});
+		} finally {
+			setIsUploading(false);
+		}
+	}, [selectedFiles, toast, router, user]);
 
 	return (
 		<div className="space-y-6">
@@ -168,7 +277,10 @@ export function FileUploader() {
 				onDragLeave={handleDragLeave}
 				onDragOver={handleDragOver}
 				onDrop={handleDrop}
-				onClick={() => document.getElementById('fileInput')?.click()}
+				onClick={() =>
+					!isUploading &&
+					document.getElementById('fileInput')?.click()
+				}
 			>
 				<UploadCloudIcon
 					className={cn(
@@ -191,6 +303,7 @@ export function FileUploader() {
 					className="hidden"
 					onChange={handleFileChange}
 					accept={acceptAttributeValue}
+					disabled={isUploading}
 				/>
 			</div>
 
@@ -216,8 +329,11 @@ export function FileUploader() {
 								<Button
 									variant="ghost"
 									size="icon"
-									onClick={() => removeFile(index)}
+									onClick={() =>
+										!isUploading && removeFile(index)
+									}
 									aria-label="Remove file"
+									disabled={isUploading}
 								>
 									<XIcon className="w-4 h-4" />
 								</Button>
@@ -227,9 +343,16 @@ export function FileUploader() {
 					<div className="flex justify-end pt-2">
 						<Button
 							onClick={handleUpload}
-							disabled={selectedFiles.length === 0}
+							disabled={selectedFiles.length === 0 || isUploading}
 						>
-							Upload {selectedFiles.length} File(s)
+							{isUploading ? (
+								<>
+									<Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
+									Uploading...
+								</>
+							) : (
+								`Upload ${selectedFiles.length} File(s)`
+							)}
 						</Button>
 					</div>
 				</div>

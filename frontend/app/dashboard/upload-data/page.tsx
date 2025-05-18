@@ -1,3 +1,5 @@
+'use client';
+
 import {
 	Card,
 	CardContent,
@@ -23,15 +25,18 @@ import {
 	TableHeader,
 	TableRow,
 } from '@/components/ui/table';
+import { useFilterStore } from '@/store/filter-store';
+import { parseISO, isWithinInterval, isValid } from 'date-fns';
+import { useMemo } from 'react';
 
 interface PastUpload {
 	id: string;
 	name: string;
-	uploadDate: string;
+	uploadDate: string; // Expecting YYYY-MM-DD format
 	size: string;
 }
 
-const placeholderPastUploads: PastUpload[] = [
+const placeholderPastUploadsData: PastUpload[] = [
 	{
 		id: 'ds001',
 		name: 'Enron Full Archive (mbox)',
@@ -59,6 +64,46 @@ const placeholderPastUploads: PastUpload[] = [
 ];
 
 export default function UploadDataPage() {
+	const { keywords, dateRange } = useFilterStore();
+
+	const filteredPastUploads = useMemo(() => {
+		let data = [...placeholderPastUploadsData];
+
+		if (keywords) {
+			const lowercasedKeywords = keywords.toLowerCase();
+			data = data.filter((upload) =>
+				upload.name.toLowerCase().includes(lowercasedKeywords),
+			);
+		}
+
+		if (dateRange?.from || dateRange?.to) {
+			data = data.filter((upload) => {
+				const uploadDateObj = parseISO(upload.uploadDate);
+				if (!isValid(uploadDateObj)) return false;
+
+				const fromDate = dateRange.from;
+				const toDate = dateRange.to
+					? new Date(dateRange.to.setHours(23, 59, 59, 999))
+					: undefined;
+
+				if (fromDate && toDate) {
+					return isWithinInterval(uploadDateObj, {
+						start: fromDate,
+						end: toDate,
+					});
+				}
+				if (fromDate) {
+					return uploadDateObj >= fromDate;
+				}
+				if (toDate) {
+					return uploadDateObj <= toDate;
+				}
+				return true;
+			});
+		}
+		return data;
+	}, [placeholderPastUploadsData, keywords, dateRange]);
+
 	return (
 		<div className="space-y-6">
 			<Card>
@@ -82,7 +127,6 @@ export default function UploadDataPage() {
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					{/* Placeholder for file processing queue */}
 					<p className="text-sm text-muted-foreground">
 						No files currently processing. Uploaded files will
 						appear here with their status.
@@ -96,10 +140,15 @@ export default function UploadDataPage() {
 					<CardDescription>
 						Select an active dataset for analysis or review your
 						upload history.
+						{(keywords || dateRange?.from) &&
+							` Filtering history by: ${
+								keywords ? `keywords "${keywords}"` : ''
+							}${keywords && dateRange?.from ? ' and ' : ''}${
+								dateRange?.from ? `dates` : ''
+							}.`}
 					</CardDescription>
 				</CardHeader>
 				<CardContent className="space-y-6">
-					{/* Part 1: Select Active Dataset */}
 					<div className="space-y-2">
 						<Label
 							htmlFor="active-dataset-select"
@@ -116,16 +165,19 @@ export default function UploadDataPage() {
 									<SelectValue placeholder="Choose a dataset to make active" />
 								</SelectTrigger>
 								<SelectContent>
-									{placeholderPastUploads.map((upload) => (
-										<SelectItem
-											key={upload.id}
-											value={upload.id}
-										>
-											{upload.name} (Uploaded:{' '}
-											{upload.uploadDate})
-										</SelectItem>
-									))}
-									{placeholderPastUploads.length === 0 && (
+									{placeholderPastUploadsData.map(
+										(upload) => (
+											<SelectItem
+												key={upload.id}
+												value={upload.id}
+											>
+												{upload.name} (Uploaded:{' '}
+												{upload.uploadDate})
+											</SelectItem>
+										),
+									)}
+									{placeholderPastUploadsData.length ===
+										0 && (
 										<SelectItem value="no-data" disabled>
 											No past uploads available
 										</SelectItem>
@@ -134,14 +186,15 @@ export default function UploadDataPage() {
 							</Select>
 							<Button
 								className="w-full sm:w-auto flex-shrink-0"
-								disabled={placeholderPastUploads.length === 0}
+								disabled={
+									placeholderPastUploadsData.length === 0
+								}
 							>
 								Load Selected Dataset
 							</Button>
 						</div>
 					</div>
 
-					{/* Part 2: Upload History Table */}
 					<div>
 						<h3 className="text-lg font-semibold mb-3">
 							Upload History
@@ -159,8 +212,8 @@ export default function UploadDataPage() {
 									</TableRow>
 								</TableHeader>
 								<TableBody>
-									{placeholderPastUploads.length > 0 ? (
-										placeholderPastUploads.map((upload) => (
+									{filteredPastUploads.length > 0 ? (
+										filteredPastUploads.map((upload) => (
 											<TableRow key={upload.id}>
 												<TableCell className="font-medium">
 													{upload.name}
@@ -187,7 +240,8 @@ export default function UploadDataPage() {
 												colSpan={4}
 												className="h-24 text-center text-muted-foreground"
 											>
-												No past uploads found.
+												No past uploads found matching
+												your filters.
 											</TableCell>
 										</TableRow>
 									)}

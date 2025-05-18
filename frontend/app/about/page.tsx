@@ -16,6 +16,32 @@ export default function AboutPage() {
 
 	return (
 		<div className="flex flex-col min-h-screen bg-background text-foreground">
+			{/* Header */}
+			<header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+				<div className="container flex h-16 items-center max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+					<Link href="/" className="flex items-center gap-2 mr-6">
+						<MailThreaderLogo className="h-7 w-7 text-primary" />
+						<span className="text-xl font-semibold">
+							Mail-Threader
+						</span>
+					</Link>
+					<nav className="flex items-center space-x-2 sm:space-x-4 text-sm font-medium ml-auto">
+						<Button variant="ghost" asChild>
+							<Link href="/about">About</Link>
+						</Button>
+						<Button variant="ghost" asChild>
+							<Link href="/contact">Contact</Link>
+						</Button>
+						<Button variant="ghost" asChild>
+							<Link href="/login">Login</Link>
+						</Button>
+						<Button asChild>
+							<Link href="/signup">Sign Up</Link>
+						</Button>
+					</nav>
+				</div>
+			</header>
+
 			{/* Main Content */}
 			<main className="flex-1 py-12 md:py-16 lg:py-20">
 				<div className="container max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -101,7 +127,7 @@ export default function AboutPage() {
 								<div className="grid md:grid-cols-2 gap-6 mt-6">
 									<div className="rounded-lg overflow-hidden shadow-md">
 										<Image
-											src="https://picsum.photos/600/400?random=10"
+											src="https://placehold.co/600x400.png"
 											alt="Team working on data analysis"
 											width={600}
 											height={400}
@@ -111,7 +137,7 @@ export default function AboutPage() {
 									</div>
 									<div className="rounded-lg overflow-hidden shadow-md">
 										<Image
-											src="https://picsum.photos/600/400?random=11"
+											src="https://placehold.co/600x400.png"
 											alt="Abstract representation of data threads"
 											width={600}
 											height={400}

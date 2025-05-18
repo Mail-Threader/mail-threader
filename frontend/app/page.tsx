@@ -8,13 +8,14 @@ import {
 	CardTitle,
 	CardDescription,
 } from '@/components/ui/card';
+import { MailThreaderLogo } from '@/components/icons/mail-threader-logo';
 import {
 	BarChartBigIcon,
 	FileTextIcon,
 	ChevronRightIcon,
 	ShuffleIcon,
 	GitMergeIcon,
-} from 'lucide-react';
+} from 'lucide-react'; // TableIcon removed as unused
 
 const features = [
 	{
@@ -22,7 +23,7 @@ const features = [
 		title: 'Intelligent Email Threading',
 		description:
 			'Automatically group related emails into coherent threads, making it easy to follow conversations and understand context.',
-		imageSrc: 'https://picsum.photos/600/400?random=1',
+		imageSrc: 'https://placehold.co/600x400.png',
 		imageHint: 'email threads',
 		link: '/dashboard/data-view',
 	},
@@ -31,7 +32,7 @@ const features = [
 		title: 'AI-Powered Summarization',
 		description:
 			'Cut through the noise. Our AI condenses lengthy email threads and documents into concise, actionable summaries, highlighting crucial information.',
-		imageSrc: 'https://picsum.photos/600/400?random=2',
+		imageSrc: 'https://placehold.co/600x400.png',
 		imageHint: 'ai document',
 		link: '/dashboard/summarization',
 	},
@@ -40,7 +41,7 @@ const features = [
 		title: 'Insightful Visualizations',
 		description:
 			'Visualize communication patterns, topic clusters, and sentiment trends within your email data using interactive charts and graphs.',
-		imageSrc: 'https://picsum.photos/600/400?random=3',
+		imageSrc: 'https://placehold.co/600x400.png',
 		imageHint: 'charts graph',
 		link: '/dashboard/visualizations',
 	},
@@ -49,7 +50,7 @@ const features = [
 		title: 'Advanced Data Processing',
 		description:
 			'Efficiently process and prepare large email datasets for analysis, with tools for cleaning, filtering, and structuring your data.',
-		imageSrc: 'https://picsum.photos/600/400?random=4',
+		imageSrc: 'https://placehold.co/600x400.png',
 		imageHint: 'data processing',
 		link: '/dashboard/data-view',
 	},
@@ -60,6 +61,32 @@ export default function LandingPage() {
 
 	return (
 		<div className="flex flex-col min-h-screen bg-background text-foreground">
+			{/* Header */}
+			<header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+				<div className="container flex h-16 items-center max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+					<Link href="/" className="flex items-center gap-2 mr-6">
+						<MailThreaderLogo className="h-7 w-7 text-primary" />
+						<span className="text-xl font-semibold">
+							Mail-Threader
+						</span>
+					</Link>
+					<nav className="flex items-center space-x-2 sm:space-x-4 text-sm font-medium ml-auto">
+						<Button variant="ghost" asChild>
+							<Link href="/about">About</Link>
+						</Button>
+						<Button variant="ghost" asChild>
+							<Link href="/contact">Contact</Link>
+						</Button>
+						<Button variant="ghost" asChild>
+							<Link href="/login">Login</Link>
+						</Button>
+						<Button asChild>
+							<Link href="/signup">Sign Up</Link>
+						</Button>
+					</nav>
+				</div>
+			</header>
+
 			{/* Main Content */}
 			<main className="flex-1">
 				{/* Hero Section */}
@@ -170,7 +197,7 @@ export default function LandingPage() {
 							</p>
 							<div className="mt-10">
 								<Image
-									src="https://picsum.photos/1200/600?random=5"
+									src="https://placehold.co/1200x600.png"
 									alt="Data processing pipeline"
 									width={1200}
 									height={600}
