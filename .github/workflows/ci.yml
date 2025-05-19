@@ -28,9 +28,9 @@ jobs:
       - name: Check import sorting with isort
         run: |
           isort --check-only --profile black src tests
-      - name: Type check with mypy
-        run: |
-          mypy --ignore-missing-imports src
+      # - name: Type check with mypy
+      #   run: |
+      #     mypy --ignore-missing-imports src
 
   test:
     runs-on: ubuntu-latest

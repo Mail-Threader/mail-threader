@@ -15,6 +15,12 @@ sompy-package
 loguru
 tqdm
 dateparser
+python-dotenv
+
+# Database
+psycopg2-binary
+sqlalchemy
+supabase
 
 # Development tools
 # Linting and formatting
@@ -26,3 +32,5 @@ pytest
 
 # Build tools
 setuptools
+
+spacy

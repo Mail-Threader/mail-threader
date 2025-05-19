@@ -1,13 +1,15 @@
-# from loguru import logger
-import json
 import os
 import re
 import time
-import dateparser
-from tqdm import tqdm
-import pandas as pd
-import pickle
 from datetime import datetime
+
+import dateparser
+import pandas as pd
+from loguru import logger
+from tqdm import tqdm
+from typing_extensions import Match
+
+from src.utils.utils import save_to_postgresql
 
 
 class DataPreparation:
@@ -24,17 +26,18 @@ class DataPreparation:
         Initialize the DataPreparation class.
 
         Args:
-            email_dir (str): Directory containing the email files
+            input_dir (str): Directory containing the email files
             output_dir (str): Directory to store processed data
         """
         self.input_dir = input_dir
         self.output_dir = output_dir
 
-        # Create output directory if it doesn't exist
+        # Create an output directory if it doesn't exist
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
-    def normalize_dates(self, text):
+    @staticmethod
+    def normalize_dates(text):
         if text is None:
             return None
         cleaned_text = re.sub(r"\s*\([A-Z]{2,}\)$", "", text.strip())
@@ -44,7 +47,8 @@ class DataPreparation:
             text = text.replace(text, european_date)
         return text
 
-    def split_headers_body(self, email_text):
+    @staticmethod
+    def split_headers_body(email_text):
         """Splits raw email into headers and body."""  # docstring
         parts = email_text.split("\n\n", 1)
         headers = parts[0]
@@ -52,7 +56,7 @@ class DataPreparation:
         return headers, body
 
     def parse_headers_org(self, header_text, main_id):
-        """Parses the originals headers into a dictionary."""
+        """Parses the original headers into a dictionary."""
         fields = {
             "original_message_id": main_id + "original",  # we create
             "main_id": main_id,
@@ -119,7 +123,8 @@ class DataPreparation:
 
         return fields
 
-    def parse_forwarded_block(self, forward_block):
+    @staticmethod
+    def parse_forwarded_block(forward_block):
         """Parses a single forwarded message block and extracts headers from the body."""
         fwd_data = {
             "date": set(),
@@ -131,8 +136,6 @@ class DataPreparation:
             "subject": set(),
             "body": set(),
         }
-        body_lines = []
-        header_found = False
 
         # Extract information about the forwarder
         forward_info = re.search(
@@ -182,14 +185,15 @@ class DataPreparation:
         subject_info = re.search(r"Subject:\s*(.+)", forward_block)
         fwd_data["subject"].add(subject_info.group(1).strip()) if subject_info else None
 
-        # Extract message body after the subject
+        # Extract the message body after the subject
         message_match = re.search(r"Subject:.*?\n\n(.*)", forward_block, re.DOTALL)
         fwd_data["body"].add(message_match.group(1).strip()) if message_match else None
 
         return fwd_data
 
-    def clean_body(self, body):
-        """Clean body text (remove reply chains, extra spaces, etc)."""
+    @staticmethod
+    def clean_body(body):
+        """Clean body text (remove reply chains, extra spaces, etc.)."""
 
         # Remove lines starting with "to:", "cc:", "subject:", etc.
         body = re.sub(
@@ -215,12 +219,11 @@ class DataPreparation:
 
         return body
 
-    def split_all_messages(self, email_text):
-        """Split main message and all forwarded and original messages (preserve markers)."""
+    @staticmethod
+    def split_all_messages(email_text):
+        """Split the main message and all forwarded and original messages (preserve markers)."""
         # regex for forwarded and originals
-        forward_pattern = re.compile(
-            r"^[-]+\s*Forwarded by.*", re.MULTILINE | re.IGNORECASE
-        )
+        forward_pattern = re.compile(r"^[-]+\s*Forwarded by.*", re.MULTILINE | re.IGNORECASE)
         original_pattern = re.compile(
             r"^\s*[-]+\s*Original Message.*", re.MULTILINE | re.IGNORECASE
         )
@@ -228,37 +231,27 @@ class DataPreparation:
         forward_matches = list(
             forward_pattern.finditer(email_text)
         )  # find all non-overlapping occurrences of a pattern within the string
-        original_matches = list(
-            original_pattern.finditer(email_text)
-        )  # -----Original Message-----
+        original_matches = list(original_pattern.finditer(email_text))  # -----Original Message-----
 
         forward_parts = []
         original_parts = []
         main_text = email_text
 
+        def filter_list(matches, context_list):
+            _main_text = email_text[: matches[0].start()]
+            for i in range(len(matches)):
+                start = matches[i].start()
+                end = matches[i + 1].start() if i + 1 < len(matches) else len(email_text)
+                context_list.append(email_text[start:end])
+            return _main_text
+
         if forward_matches:
-            # msin text before first forwards
-            main_text = email_text[: forward_matches[0].start()]
-            for i in range(len(forward_matches)):
-                start = forward_matches[i].start()
-                end = (
-                    forward_matches[i + 1].start()
-                    if i + 1 < len(forward_matches)
-                    else len(email_text)
-                )
-                forward_parts.append(email_text[start:end])
+            # main text before first forwards
+            main_text = filter_list(forward_matches, forward_parts)
 
         if original_matches:
             # main text before first original
-            main_text = email_text[: original_matches[0].start()]
-            for i in range(len(original_matches)):
-                start = original_matches[i].start()
-                end = (
-                    original_matches[i + 1].start()
-                    if i + 1 < len(original_matches)
-                    else len(email_text)
-                )
-                original_parts.append(email_text[start:end])
+            main_text = filter_list(original_matches, original_parts)
 
         return main_text.strip(), forward_parts, original_parts
 
@@ -301,9 +294,7 @@ class DataPreparation:
                 "body": None,
             }
             parsed_fwd = self.parse_forwarded_block(fwd_text)
-            fwd_data1["date"] = self.normalize_dates(
-                next(iter(parsed_fwd.get("date", [])), None)
-            )
+            fwd_data1["date"] = self.normalize_dates(next(iter(parsed_fwd.get("date", [])), None))
             fwd_data1["from"] = parsed_fwd.get("from")
             fwd_data1["original_sender"] = parsed_fwd.get("original_sender")
             fwd_data1["original_Date"] = parsed_fwd.get("original_Date")
@@ -315,8 +306,14 @@ class DataPreparation:
 
         return extracted_emails
 
-    def process_all_emails(self, skip=False):
-        """Reads and processes all email files in the given folder and shows progress with stats."""
+    def process_all_emails(self, save_to_db: bool = True):
+        """
+        Reads and processes all email files in the given folder and shows progress with stats.
+
+        Args:
+            save_to_db: Whether to save the processed data to PostgreSQL database
+            db_url: Database connection URL (if None, will use environment variable DATABASE_URL)
+        """
         data = {
             "message_id": [],
             "original_message_id": [],
@@ -341,16 +338,14 @@ class DataPreparation:
         total_emails = 0
         start_time = time.time()
         total_files = sum(len(files) for _, _, files in os.walk(self.input_dir))
-        print(f"📂 Looking for files in: {os.path.abspath(self.input_dir)}")
+        logger.info(f"📂 Looking for files in: {os.path.abspath(self.input_dir)}")
 
         with tqdm(total=total_files, desc="📬 Processing emails") as pbar:
             for root, dirs, files in os.walk(self.input_dir):
                 for filename in files:
                     file_path = os.path.join(root, filename)
                     if os.path.isfile(file_path):
-                        with open(
-                            file_path, "r", encoding="utf-8", errors="ignore"
-                        ) as f:
+                        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                             raw_text = f.read()
                             email_data = self.extract_all_emails(raw_text)
                             for email in email_data:
@@ -364,9 +359,7 @@ class DataPreparation:
                                     if key in email:
                                         value = email.get(key)
                                         if isinstance(value, set):
-                                            data[key].append(
-                                                next(iter(value)) if value else None
-                                            )
+                                            data[key].append(next(iter(value)) if value else None)
                                         else:
                                             data[key].append(value)
                                     else:
@@ -394,13 +387,21 @@ class DataPreparation:
                     pbar.update(1)
         end_time = time.time()
         elapsed = end_time - start_time
-        print(f"\n✅ Done! Total emails: {total_emails}")
-        print(
-            f"  Original: {original_count}, Forwarded: {forwarded_count}, main: {main_count}"
-        )
-        print(f"⏱️ Time elapsed: {elapsed:.2f} seconds")
+        logger.success(f"\n✅ Done! Total emails: {total_emails}")
+        logger.info(f"Original: {original_count}, Forwarded: {forwarded_count}, main: {main_count}")
+        logger.info(f"⏱️ Time elapsed: {elapsed:.2f} seconds")
 
         df = pd.DataFrame(data)
+
+        # Save to PostgreSQL if requested
+        if save_to_db:
+            try:
+                logger.info("Saving processed emails to PostgreSQL database...")
+                self.save_to_postgresql(df, table_name="processed_emails")
+            except Exception as e:
+                logger.error(f"Failed to save to PostgreSQL: {e}")
+                logger.info("Continuing without saving to database.")
+
         return df
 
     def save_to_json(self, df):
@@ -413,22 +414,66 @@ class DataPreparation:
             indent=2,
             force_ascii=False,
         )
-        print(f"\n✅ Saved {len(df)} rows to {output_path}")
+        logger.success(f"\n✅ Saved {len(df)} rows to {output_path}")
 
     def save_to_pickle(self, df: pd.DataFrame):
         """Save a list of cleaned email dataframe to a pickle file."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_path = os.path.join(self.output_dir, f"processed_data_{timestamp}.pkl")
         df.to_pickle(output_path)
-        print(f"\n✅ Saved {len(df)} cleaned emails to {output_path}")
+        logger.success(f"\n✅ Saved {len(df)} cleaned emails to {output_path}")
+
+    @staticmethod
+    def save_to_postgresql(
+        df: pd.DataFrame,
+        table_name: str = "processed_emails",
+        if_exists: str = "replace",
+    ) -> None:
+        """
+        Save the DataFrame to a PostgreSQL database in Neon.
+
+        Args:
+            df: DataFrame to save
+            db_url: Database connection URL (if None, will use environment variable DATABASE_URL)
+            table_name: Name of the table to create/replace
+            if_exists: How to behave if the table already exists ('fail', 'replace', or 'append')
+        """
+        success_message = f"\n✅ Saved {len(df)} rows to PostgreSQL table: {table_name}"
+        save_to_postgresql(df, table_name, if_exists, success_message)
+
+    def load_data(self, file_path: str | None = None):
+        """Load the cleaned email dataframe from a pickle file."""
+        if file_path is None:
+            # Find the most recent processed data file
+            pkl_files = [
+                f
+                for f in os.listdir(self.output_dir)
+                if f.startswith("processed_data_") and f.endswith(".pkl")
+            ]
+            logger.info(f"Found {len(pkl_files)} processed data files in {self.output_dir}")
+            if not pkl_files:
+                logger.error(f"No processed data files found in {self.input_dir}")
+                return pd.DataFrame()
+
+            # Sort by timestamp in the filename
+            pkl_files.sort(reverse=True)
+            file_path = os.path.join(self.output_dir, pkl_files[0])
+
+        try:
+            df = pd.read_pickle(file_path)
+            logger.info(f"Loaded data from {file_path}: {len(df)} emails")
+            return df
+        except Exception as e:
+            logger.error(f"Error loading data from {file_path}: {e}")
+            return pd.DataFrame()
 
 
 if __name__ == "__main__":
     # Create a DataPreparation instance
     data_prep = DataPreparation()
 
-    data = data_prep.process_all_emails()
-    data_prep.save_to_json(data)
-    data_prep.save_to_pickle(data)
+    data_df = data_prep.process_all_emails()
+    data_prep.save_to_json(data_df)
+    data_prep.save_to_pickle(data_df)
 
-    print("Done!")
+    logger.info("Data Preparation Finished")

@@ -45,37 +45,13 @@ def parse_arguments():
         action="store_true",
         help="Skip summarization and classification (use existing analysis results)",
     )
-    parser.add_argument(
-        "--skip-visualization", action="store_true", help="Skip visualization step"
-    )
-    parser.add_argument(
-        "--skip-stories", action="store_true", help="Skip story development step"
-    )
+    parser.add_argument("--skip-visualization", action="store_true", help="Skip visualization step")
+    parser.add_argument("--skip-stories", action="store_true", help="Skip story development step")
 
     return parser.parse_args()
 
+
 def setup_directories(args):
-    root = os.getcwd()
-
-    processed_data_dir = os.path.join(root, "src", "data_preparation")  # point to where the file actually is
-    analysis_results_dir = os.path.join(args.output_dir, "analysis_results")
-    visualizations_dir = os.path.join(args.output_dir, "visualizations")
-    stories_dir = os.path.join(args.output_dir, "stories")
-
-    for directory in [analysis_results_dir, visualizations_dir, stories_dir]:
-        if not os.path.exists(directory):
-            os.makedirs(directory)
-
-    return {
-        "data_dir": args.data_dir,
-        "output_dir": args.output_dir,
-        "processed_data_dir": processed_data_dir,
-        "analysis_results_dir": analysis_results_dir,
-        "visualizations_dir": visualizations_dir,
-        "stories_dir": stories_dir,
-    }
-
-#def setup_directories(args):
     """
     Set up the directory structure for the pipeline.
 
@@ -85,8 +61,6 @@ def setup_directories(args):
     Returns:
         dict: Dictionary containing paths to all directories
     """
-    # # Create timestamp for output directories
-    # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     # Create the main output directory
     if not os.path.exists(args.output_dir):
@@ -94,7 +68,7 @@ def setup_directories(args):
 
     # Create subdirectories for each step
     processed_data_dir = os.path.join(args.output_dir, "processed_data")
-    analysis_results_dir = os.path.join(args.output_dir, "summarization_results")
+    analysis_results_dir = os.path.join(args.output_dir, "analysis_results")
     visualizations_dir = os.path.join(args.output_dir, "visualizations")
     stories_dir = os.path.join(args.output_dir, "stories")
 
@@ -129,23 +103,19 @@ def run_data_preparation(dirs, skip=False):
     Returns:
         pandas.DataFrame: Processed email data
     """
+
+    data_prep = DataPreparation(input_dir=dirs["data_dir"], output_dir=dirs["processed_data_dir"])
     if skip:
         logger.info("Skipping data preparation step...")
         # Try to load existing processed data
-        DataPreparation(
-            input_dir=dirs["data_dir"], output_dir=dirs["processed_data_dir"]
-        )
-        # try:
-        #     df = data_prep.load_data()
-        #     logger.info(f"Loaded processed data with {len(df)} emails")
-        #     return df
-        # except FileNotFoundError:
-        #     logger.warning("No processed data found. Running data preparation step...")
+        try:
+            df = data_prep.load_data()
+            logger.info(f"Loaded processed data with {len(df)} emails")
+            return df
+        except FileNotFoundError:
+            logger.warning("No processed data found. Running data preparation step...")
 
     logger.info("Running data preparation step...")
-    data_prep = DataPreparation(
-        input_dir=dirs["data_dir"], output_dir=dirs["processed_data_dir"]
-    )
     df = data_prep.process_all_emails()
     data_prep.save_to_pickle(df)
     data_prep.save_to_json(df)
@@ -165,34 +135,22 @@ def run_summarization_classification(_, dirs, skip=False):
     Returns:
         dict: Dictionary containing analysis results.
     """
-    if skip:
-        logger.info("Skipping summarization and classification step...")
-        return
-
-    logger.info("Running summarization and classification step...")
 
     analyzer = SummarizationClassification(
-        input_dir=dirs["processed_data_dir"],
-        output_dir=dirs["analysis_results_dir"]
+        input_dir=dirs["processed_data_dir"], output_dir=dirs["analysis_results_dir"]
     )
 
-    df = analyzer.load_json_emails("clean_emails.json")
-    df = analyzer.clean_text_column(df)
-    df = analyzer.tokenize_column(df, text_column="clean_body")
-    X, vectorizer = analyzer.vectorize_document(df["clean_body"])
-    model, labels = analyzer.cluster_documents(X, method="kmeans", n_clusters=5)
-    df["cluster"] = labels
-    topics = analyzer.generate_cluster_topics(df["clean_body"], labels, X, vectorizer)
-    print("Cluster Topics:", topics)
-    top_words = analyzer.extract_top_words(X, vectorizer)
-    print("Top overall words:", top_words)
-    df = analyzer.extract_entities(df)
-    df = analyzer.analyze_sentiment(df)
-    summary = analyzer.summarize_corpus(df)
-    print("Corpus Summary:\n", summary)
-    #analyzer.save_to_csv(df, "email_analysis_results.csv")
-    analyzer.save_to_sqlite(df)
-    #analyzer.save_to_json(df, "email_analysis_results.json")
+    if skip:
+        logger.info("Skipping summarization and classification step...")
+        df = analyzer.load_data(skip=True)
+        return df
+    logger.info("Running summarization and classification step...")
+
+    df = analyzer.process_data()
+    analyzer.save_to_json(df)
+    logger.info(f"Processed {len(df)} emails")
+    return df
+
 
 def run_visualization(df, analysis_results, dirs, skip=False):
     """
@@ -212,14 +170,14 @@ def run_visualization(df, analysis_results, dirs, skip=False):
         return {}
 
     logger.info("Running visualization step...")
-    Visualization(
+    visualizer = Visualization(
         input_dir=dirs["processed_data_dir"],
         analysis_dir=dirs["analysis_results_dir"],
         output_dir=dirs["visualizations_dir"],
     )
-    # visualization_paths = visualizer.visualize_all(df, analysis_results)
-    # logger.info(f"Generated {len(visualization_paths)} visualizations")
-    # return visualization_paths
+    visualization_paths = visualizer.visualize_all(df, analysis_results)
+    logger.info(f"Generated {len(visualization_paths)} visualizations")
+    return visualization_paths
 
 
 def run_story_development(df, analysis_results, dirs, skip=False):
@@ -240,19 +198,17 @@ def run_story_development(df, analysis_results, dirs, skip=False):
         return {}
 
     logger.info("Running story development step...")
-    StoryDevelopment(
+    story_developer = StoryDevelopment(
         input_dir=dirs["processed_data_dir"],
         analysis_dir=dirs["analysis_results_dir"],
         output_dir=dirs["stories_dir"],
     )
-    # stories = story_developer.develop_stories(df, analysis_results)
-    # logger.info(f"Generated {len(stories)} stories")
-    # return stories
+    stories = story_developer.develop_stories(df, analysis_results)
+    logger.info(f"Generated {len(stories)} stories")
+    return stories
 
 
-def generate_report(
-    dirs, data_results, analysis_results, visualization_paths, story_results
-):
+def generate_report(dirs, data_results, analysis_results, visualization_paths, story_results):
     """
     Generate a final HTML report.
 
@@ -283,14 +239,10 @@ def main():
     # Run each step of the pipeline
     df = run_data_preparation(dirs, args.skip_data_prep)
     analysis_results = run_summarization_classification(df, dirs, args.skip_analysis)
-    visualization_paths = run_visualization(
-        df, analysis_results, dirs, args.skip_visualization
-    )
+    visualization_paths = run_visualization(df, analysis_results, dirs, args.skip_visualization)
     story_results = run_story_development(df, analysis_results, dirs, args.skip_stories)
     # Generate a final report
-    report_path = generate_report(
-        dirs, df, analysis_results, visualization_paths, story_results
-    )
+    report_path = generate_report(dirs, df, analysis_results, visualization_paths, story_results)
     logger.info(f"Pipeline completed. Final report available at {report_path}")
 
 
