@@ -109,7 +109,7 @@ export default function SummarizationPage() {
 
 	return (
 		<div className="space-y-6">
-			<Card>
+			{/* <Card>
 				<CardHeader>
 					<CardTitle>Email Summaries</CardTitle>
 					<CardDescription>
@@ -178,55 +178,7 @@ export default function SummarizationPage() {
 						</p>
 					)}
 				</CardContent>
-			</Card>
-
-			<Card>
-				<CardHeader>
-					<CardTitle>Summarization Insights</CardTitle>
-					<CardDescription>
-						Key themes and topics emerging from summarization.
-					</CardDescription>
-				</CardHeader>
-				<CardContent className="grid md:grid-cols-3 gap-4">
-					{[
-						{
-							title: 'Financial Irregularities',
-							hint: 'financial chart',
-							icon: ZapIcon,
-						},
-						{
-							title: 'Regulatory Concerns',
-							hint: 'legal document',
-							icon: ZapIcon,
-						},
-						{
-							title: 'Market Manipulation',
-							hint: 'stock market',
-							icon: ZapIcon,
-						},
-					].map((insight) => (
-						<Card
-							key={insight.title}
-							className="shadow-md hover:shadow-lg transition-shadow"
-						>
-							<CardContent className="p-4 flex flex-col items-center text-center">
-								<Image
-									src={`https://placehold.co/300x200.png`}
-									alt={insight.title}
-									width={300}
-									height={200}
-									className="rounded-md mb-3 w-full h-auto object-cover"
-									data-ai-hint={insight.hint}
-								/>
-								<insight.icon className="h-8 w-8 text-primary mb-2" />
-								<h3 className="font-semibold text-md">
-									{insight.title}
-								</h3>
-							</CardContent>
-						</Card>
-					))}
-				</CardContent>
-			</Card>
+			</Card> */}
 		</div>
 	);
 }

@@ -1,4 +1,13 @@
-import { json, pgEnum, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import {
+	date,
+	doublePrecision,
+	integer,
+	json,
+	pgEnum,
+	pgTable,
+	text,
+	timestamp,
+} from 'drizzle-orm/pg-core';
 
 export const roleEnum = pgEnum('role', ['DEV', 'CLIENT']);
 
@@ -47,3 +56,88 @@ export const fileStorageTable = pgTable('file_storage', {
 
 export type FileStorage = typeof fileStorageTable.$inferSelect;
 export type NewFileStorage = typeof fileStorageTable.$inferInsert;
+
+export const processedEmails = pgTable('processed_emails', {
+	messageId: text('message_id'),
+	originalMessageId: text('original_message_id'),
+	mainId: text('main_id'),
+	filename: text(),
+	type: text(),
+	date: text(),
+	from: text(),
+	xFrom: text('X-From'),
+	xTo: text('X-To'),
+	originalSender: text('original_sender'),
+	originalDate: text('original_Date'),
+	to: text(),
+	subject: text(),
+	cc: text(),
+	xCc: text('X-cc'),
+	body: text(),
+});
+
+export type ProcessedEmail = typeof processedEmails.$inferSelect;
+export type NewProcessedEmail = typeof processedEmails.$inferInsert;
+
+export const summarizedEmails = pgTable('summarized_emails', {
+	messageId: text('message_id'),
+	originalMessageId: text('original_message_id'),
+	mainId: text('main_id'),
+	filename: text(),
+	type: text(),
+	date: text(),
+	from: text(),
+	xFrom: text('X-From'),
+	xTo: text('X-To'),
+	originalSender: text('original_sender'),
+	originalDate: text('original_Date'),
+	to: text(),
+	subject: text(),
+	cc: text(),
+	xCc: text('X-cc'),
+	body: text(),
+	cleanBody: text('clean_body'),
+	tokens: text(),
+	cluster: integer(),
+	persons: text(),
+	organizations: text(),
+	locations: text(),
+	sentiment: text(),
+	processedDate: text('processed_date'),
+	corpusSummary: text('corpus_summary'),
+});
+
+export type SummarizedEmail = typeof summarizedEmails.$inferSelect;
+export type NewSummarizedEmail = typeof summarizedEmails.$inferInsert;
+
+export const visualizationData = pgTable('visualization_data', {
+	fileType: text('file_type'),
+	fileUrl: text('file_url'),
+});
+
+export type VisualizationData = typeof visualizationData.$inferSelect;
+export type NewVisualizationData = typeof visualizationData.$inferInsert;
+
+export const stories = pgTable('stories', {
+	title: text(),
+	type: text(),
+	actor: text(),
+	metrics: text(),
+	commonTopics: text('common_topics'),
+	sampleSubjects: text('sample_subjects'),
+	summary: text(),
+	date: date(),
+	emailCount: doublePrecision('email_count'),
+	commonWords: text('common_words'),
+	subject: text(),
+	numEmails: doublePrecision('num_emails'),
+	participants: text(),
+	startDate: timestamp('start_date', { mode: 'string' }),
+	endDate: timestamp('end_date', { mode: 'string' }),
+	topicId: text('topic_id'),
+	keywords: text(),
+	timestamp: text(),
+});
+
+export type Story = typeof stories.$inferSelect;
+export type NewStory = typeof stories.$inferInsert;

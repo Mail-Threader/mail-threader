@@ -15,91 +15,44 @@ import {
 	TableHeader,
 	TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import Image from 'next/image';
 import { useFilterStore } from '@/store/filter-store';
 import { parseISO, isWithinInterval, isValid } from 'date-fns';
-import { useMemo } from 'react';
-
-interface EmailData {
-	id: string;
-	from: string;
-	to: string;
-	subject: string;
-	date: string; // Expecting YYYY-MM-DD format
-	snippet: string;
-	status: 'Processed' | 'Pending' | 'Error';
-}
-
-const placeholderEmailData: EmailData[] = [
-	{
-		id: 'EM001',
-		from: 'jeff.skilling@enron.com',
-		to: 'john.doe@example.com',
-		subject: 'Q4 Projections',
-		date: '2025-05-15',
-		snippet: 'Please review the attached Q4 financial projections...',
-		status: 'Processed',
-	},
-	{
-		id: 'EM002',
-		from: 'andrew.fastow@enron.com',
-		to: 'jane.smith@example.com',
-		subject: 'Project Raptor Update',
-		date: '2025-05-03',
-		snippet:
-			'The Project Raptor initiative is moving forward as planned...',
-		status: 'Processed',
-	},
-	{
-		id: 'EM003',
-		from: 'kenneth.lay@enron.com',
-		to: 'board.members@enron.com',
-		subject: 'Strategic Review Meeting',
-		date: '2025-05-01',
-		snippet:
-			'Reminder: Strategic review meeting scheduled for next week...',
-		status: 'Pending',
-	},
-	{
-		id: 'EM004',
-		from: 'lou.pai@enron.com',
-		to: 'mark.rich@example.com',
-		subject: 'Asset Sale Inquiry',
-		date: '2025-05-20',
-		snippet: 'Following up on our conversation regarding asset sales...',
-		status: 'Processed',
-	},
-	{
-		id: 'EM005',
-		from: 'rebecca.mark@enron.com',
-		to: 'international.team@enron.com',
-		subject: 'International Expansion Plans',
-		date: '2025-05-10',
-		snippet: "Let's discuss the new international expansion proposals.",
-		status: 'Error',
-	},
-];
+import { useEffect, useMemo, useState } from 'react';
+import { ProcessedEmail } from '@/db/schema';
+import { getProcessedEmails } from '@/actions/data';
+// import { DataTable } from '@/components/ui/data-table';
 
 export default function DataViewPage() {
+	const [data, setData] = useState<ProcessedEmail[]>([]);
+	const [pageNum, setPageNum] = useState(0);
+
 	const { keywords, dateRange } = useFilterStore();
 
 	const filteredData = useMemo(() => {
-		let data = [...placeholderEmailData];
+		let _data = [...data];
 
 		if (keywords) {
 			const lowercasedKeywords = keywords.toLowerCase();
-			data = data.filter(
+			_data = _data.filter(
 				(email) =>
-					email.subject.toLowerCase().includes(lowercasedKeywords) ||
-					email.from.toLowerCase().includes(lowercasedKeywords) ||
-					email.to.toLowerCase().includes(lowercasedKeywords) ||
-					email.snippet.toLowerCase().includes(lowercasedKeywords),
+					(email.subject &&
+						email.subject
+							.toLowerCase()
+							.includes(lowercasedKeywords)) ||
+					(email.from &&
+						email.from
+							.toLowerCase()
+							.includes(lowercasedKeywords)) ||
+					(email.to &&
+						email.to.toLowerCase().includes(lowercasedKeywords)) ||
+					(email.body &&
+						email.body.toLowerCase().includes(lowercasedKeywords)),
 			);
 		}
 
 		if (dateRange?.from || dateRange?.to) {
-			data = data.filter((email) => {
+			_data = data.filter((email) => {
+				if (!email.date) return false;
 				const emailDate = parseISO(email.date);
 				if (!isValid(emailDate)) return false;
 
@@ -124,7 +77,20 @@ export default function DataViewPage() {
 			});
 		}
 		return data;
-	}, [placeholderEmailData, keywords, dateRange]);
+	}, [data, keywords, dateRange]);
+
+	useEffect(() => {
+		// Simulate fetching data from a database or API
+		const fetchData = async () => {
+			const response = await getProcessedEmails(pageNum);
+			if (response.length > 0) {
+				setData(response);
+			} else {
+				setPageNum(0);
+			}
+		};
+		fetchData();
+	}, []);
 
 	return (
 		<div className="space-y-6">
@@ -142,48 +108,67 @@ export default function DataViewPage() {
 							}.`}
 					</CardDescription>
 				</CardHeader>
+				{/* <CardContent>
+					<DataTable data={filteredData} />
+				</CardContent> */}
 				<CardContent>
 					{filteredData.length > 0 ? (
 						<Table>
 							<TableHeader>
 								<TableRow>
-									<TableHead>Email ID</TableHead>
-									<TableHead>From</TableHead>
-									<TableHead>To</TableHead>
-									<TableHead>Subject</TableHead>
-									<TableHead>Date</TableHead>
-									<TableHead>Status</TableHead>
-									<TableHead className="text-right">
-										Snippet
-									</TableHead>
+									<TableHead>message_id</TableHead>
+									<TableHead>original_message_id</TableHead>
+									<TableHead>main_id</TableHead>
+									<TableHead>filename</TableHead>
+									<TableHead>type</TableHead>
+									<TableHead>date</TableHead>
+									<TableHead>from</TableHead>
+									<TableHead>X-From</TableHead>
+									<TableHead>X-To</TableHead>
+									<TableHead>original_sender</TableHead>
+									<TableHead>original_Date</TableHead>
+									<TableHead>to</TableHead>
+									<TableHead>subject</TableHead>
+									<TableHead>cc</TableHead>
+									<TableHead>X-cc</TableHead>
+									<TableHead>body</TableHead>
 								</TableRow>
 							</TableHeader>
 							<TableBody>
-								{filteredData.map((email) => (
-									<TableRow key={email.id}>
-										<TableCell className="font-medium">
-											{email.id}
+								{filteredData.map((email, i) => (
+									<TableRow key={i}>
+										<TableCell className="font-medium truncate max-w-3xs">
+											{email.messageId}
 										</TableCell>
+										<TableCell className="font-medium truncate max-w-3xs">
+											{email.originalMessageId}
+										</TableCell>
+										<TableCell className="font-medium truncate max-w-3xs">
+											{email.mainId}
+										</TableCell>
+										<TableCell>{email.filename}</TableCell>
+										<TableCell>{email.type}</TableCell>
+										<TableCell>{email.date}</TableCell>
 										<TableCell>{email.from}</TableCell>
+										<TableCell>{email.xFrom}</TableCell>
+										<TableCell className="text-right text-muted-foreground truncate max-w-xs">
+											{email.xTo}
+										</TableCell>
+										<TableCell>
+											{email.originalSender}
+										</TableCell>
+										<TableCell>
+											{email.originalDate}
+										</TableCell>
 										<TableCell>{email.to}</TableCell>
 										<TableCell>{email.subject}</TableCell>
-										<TableCell>{email.date}</TableCell>
-										<TableCell>
-											<Badge
-												variant={
-													email.status === 'Processed'
-														? 'default'
-														: email.status ===
-														  'Pending'
-														? 'secondary'
-														: 'destructive'
-												}
-											>
-												{email.status}
-											</Badge>
-										</TableCell>
+										<TableCell>{email.cc}</TableCell>
 										<TableCell className="text-right text-muted-foreground truncate max-w-xs">
-											{email.snippet}
+											{email.xCc}
+										</TableCell>
+										{/* <TableCell>{email.body}</TableCell> */}
+										<TableCell className="text-right text-muted-foreground truncate max-w-xs">
+											{email.body}
 										</TableCell>
 									</TableRow>
 								))}
@@ -197,7 +182,7 @@ export default function DataViewPage() {
 				</CardContent>
 			</Card>
 
-			<Card>
+			{/* <Card>
 				<CardHeader>
 					<CardTitle>Data Overview</CardTitle>
 					<CardDescription>
@@ -226,7 +211,7 @@ export default function DataViewPage() {
 						/>
 					</div>
 				</CardContent>
-			</Card>
+			</Card> */}
 		</div>
 	);
 }

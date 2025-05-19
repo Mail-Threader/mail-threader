@@ -30,7 +30,12 @@ import {
 	ResponsiveContainer as ClientResponsiveContainer,
 } from 'recharts';
 import { useFilterStore } from '@/store/filter-store';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+	getSentimentData,
+	getTopEmailSenders,
+	getVisualizationImagesLinks,
+} from '@/actions/data';
 
 const initialEmailVolumeData = [
 	{ month: "Jan '00", date: '2000-01-01', desktop: 186, mobile: 80 },
@@ -53,28 +58,34 @@ const emailVolumeChartConfig: ChartConfig = {
 	mobile: { label: 'External Emails', color: 'hsl(var(--chart-2))' },
 };
 
-const initialTopSendersData = [
-	{ name: 'J.Skilling', emails: 4500, fill: 'hsl(var(--chart-1))' },
-	{ name: 'A.Fastow', emails: 3200, fill: 'hsl(var(--chart-2))' },
-	{ name: 'K.Lay', emails: 2800, fill: 'hsl(var(--chart-3))' },
-	{ name: 'R.Mark', emails: 2100, fill: 'hsl(var(--chart-4))' },
-	{ name: 'L.Pai', emails: 1800, fill: 'hsl(var(--chart-5))' },
-];
-
-const initialSentimentData = [
-	{ name: 'Positive', value: 400, fill: 'hsl(var(--chart-1))' },
-	{ name: 'Negative', value: 300, fill: 'hsl(var(--chart-2))' },
-	{ name: 'Neutral', value: 300, fill: 'hsl(var(--chart-3))' },
-];
+// Define colors for sentiment pie chart for POSITIVE, NEGATIVE, NEUTRAL
+const sentimentPieChartColors = ['#4CAF50', '#F44336', '#FF9800'];
 
 export default function VisualizationsPage() {
+	const [topEmailSendersData, setTopEmailSendersData] = useState<
+		{
+			sender: string | null;
+			count: number;
+		}[]
+	>([]);
+	const [sentimentData, setSentimentData] = useState<
+		{
+			sentiment: string | null;
+			count: number;
+		}[]
+	>([]);
+	const [visualizationsImages, setVisualizationsImages] = useState<
+		{
+			name: string | null;
+			url: string | null;
+		}[]
+	>([]);
+
 	const { keywords, dateRange } = useFilterStore();
 
 	// Placeholder for actual data filtering based on keywords and dateRange
 	// For now, charts will use initialData. Filtering logic would be complex for charts.
 	const emailVolumeData = initialEmailVolumeData;
-	const topSendersData = initialTopSendersData;
-	const sentimentData = initialSentimentData;
 
 	const activeFilterMessage = useMemo(() => {
 		if (keywords || dateRange?.from) {
@@ -86,6 +97,24 @@ export default function VisualizationsPage() {
 		}
 		return 'Displaying general visualizations.';
 	}, [keywords, dateRange]);
+
+	useEffect(() => {
+		const fetchData = async () => {
+			const topSendersRes = await getTopEmailSenders();
+			const sentimentRes = await getSentimentData();
+			const visualizationImagesRes = await getVisualizationImagesLinks();
+			if (topSendersRes.length > 0) {
+				setTopEmailSendersData(topSendersRes);
+			}
+			if (sentimentRes.length > 0) {
+				setSentimentData(sentimentRes);
+			}
+			if (visualizationImagesRes.length > 0) {
+				setVisualizationsImages(visualizationImagesRes);
+			}
+		};
+		fetchData();
+	}, []);
 
 	return (
 		<div className="grid gap-6 lg:grid-cols-2">
@@ -129,14 +158,14 @@ export default function VisualizationsPage() {
 							<ClientLine
 								dataKey="desktop"
 								type="monotone"
-								stroke="var(--color-desktop)"
+								stroke="black"
 								strokeWidth={2}
 								dot={false}
 							/>
 							<ClientLine
 								dataKey="mobile"
 								type="monotone"
-								stroke="var(--color-mobile)"
+								stroke="red"
 								strokeWidth={2}
 								dot={false}
 							/>
@@ -156,28 +185,28 @@ export default function VisualizationsPage() {
 					<ChartContainer config={{}} className="h-[300px] w-full">
 						<ClientBarChart
 							accessibilityLayer
-							data={topSendersData}
+							data={topEmailSendersData}
 							layout="vertical"
 							margin={{ left: 12, right: 12 }}
 						>
 							<ClientCartesianGrid horizontal={false} />
 							<ClientYAxis
-								dataKey="name"
+								dataKey="sender"
 								type="category"
 								tickLine={false}
 								axisLine={false}
 								tickMargin={8}
 							/>
-							<ClientXAxis dataKey="emails" type="number" />
+							<ClientXAxis dataKey="count" type="number" />
 							<ChartTooltip
 								cursor={false}
 								content={<ChartTooltipContent />}
 							/>
-							<ClientBar dataKey="emails" radius={4}>
-								{topSendersData.map((entry, index) => (
+							<ClientBar dataKey="count" radius={4}>
+								{topEmailSendersData.map((entry, index) => (
 									<ClientCell
 										key={`cell-${index}`}
-										fill={entry.fill}
+										fill={`hsl(var(--chart-${index + 1}))`}
 									/>
 								))}
 							</ClientBar>
@@ -205,8 +234,8 @@ export default function VisualizationsPage() {
 								/>
 								<ClientPie
 									data={sentimentData}
-									dataKey="value"
-									nameKey="name"
+									dataKey="count"
+									nameKey="sentiment"
 									cx="50%"
 									cy="50%"
 									outerRadius={80}
@@ -214,7 +243,10 @@ export default function VisualizationsPage() {
 									{sentimentData.map((entry, index) => (
 										<ClientCell
 											key={`cell-${index}`}
-											fill={entry.fill}
+											fill={
+												sentimentPieChartColors[index]
+											}
+											stroke="white"
 										/>
 									))}
 								</ClientPie>
@@ -241,21 +273,24 @@ export default function VisualizationsPage() {
 
 			<Card className="lg:col-span-2">
 				<CardHeader>
-					<CardTitle>Communication Network</CardTitle>
+					<CardTitle>Generated Visualizations</CardTitle>
 					<CardDescription>
-						Visualizing key communicators and their connections
-						(placeholder).
+						Visualizing key communicators and their connections.
 					</CardDescription>
 				</CardHeader>
-				<CardContent className="flex justify-center items-center">
-					<Image
-						src="https://placehold.co/800x400.png"
-						alt="Communication Network Graph"
-						width={800}
-						height={400}
-						className="rounded-lg shadow-md w-full h-auto object-cover"
-						data-ai-hint="network graph"
-					/>
+				<CardContent className="flex gap-4 flex-wrap">
+					{visualizationsImages.map((imageObj, index) => (
+						<Image
+							key={index}
+							src={imageObj.url || ''}
+							alt={imageObj.name || 'Visualization'}
+							width={500}
+							height={300}
+							quality={100}
+							className="rounded-lg shadow-md w-full h-auto object-cover"
+							data-ai-hint={imageObj.name || 'network graph'}
+						/>
+					))}
 				</CardContent>
 			</Card>
 		</div>
