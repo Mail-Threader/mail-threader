@@ -20,8 +20,8 @@ const ACCEPTED_FILE_TYPES = {
 	],
 	'application/zip': ['.zip'],
 };
-const MAX_FILE_SIZE_MB = 100;
-const SUPABASE_BUCKET_NAME = 'dev-data'; // Define your bucket name
+const MAX_FILE_SIZE_MB = 50; // Define max file size in MB
+const SUPABASE_BUCKET_NAME = 'input-data'; // Define your bucket name
 
 const acceptAttributeValue = Object.values(ACCEPTED_FILE_TYPES)
 	.flat()
@@ -155,7 +155,23 @@ export function FileUploader() {
 				: 'anonymous';
 			const filePath = `${userFolder}/${Date.now()}_${file.name}`; // Add timestamp to avoid overwrites
 
-			// const {} = await supabase.storage
+			const { data: buckets, error: bucketsError } =
+				await supabase.storage.listBuckets();
+
+			if (bucketsError) {
+				console.error('Error fetching buckets:', bucketsError);
+				toast({
+					title: 'Bucket Error',
+					description: 'Could not access the storage buckets.',
+					variant: 'destructive',
+				});
+				return;
+			}
+
+			const { data: bucketCreationData, error: bucketCreationError } =
+				await supabase.storage.createBucket(SUPABASE_BUCKET_NAME, {
+					public: true,
+				});
 
 			// check if the bucket exists with getBucket
 			const { data: bucketData, error: bucketError } =
