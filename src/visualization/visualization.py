@@ -15,7 +15,7 @@ from loguru import logger
 from plotly.subplots import make_subplots
 from wordcloud import WordCloud
 
-from src.utils.utils import save_to_postgresql, upload_to_supabase
+from utils import save_to_postgresql, upload_to_supabase
 
 try:
     import sompy
@@ -44,6 +44,7 @@ class Visualization:
         input_dir="./processed_data/",
         analysis_dir="./analysis_results/",
         output_dir="./visualizations/",
+        save_to_supabase=False,
     ):
         """
         Initialize the Visualization class.
@@ -56,15 +57,16 @@ class Visualization:
         self.input_dir = input_dir
         self.analysis_dir = analysis_dir
         self.output_dir = output_dir
+        self.save_to_supabase = save_to_supabase
 
-        # Create output directory if it doesn't exist
+        # Create an output directory if it doesn't exist
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
-        # Set default style for matplotlib
+        # Set the default style for matplotlib
         plt.style.use("seaborn-v0_8-whitegrid")
 
-        # Set default figure size
+        # Set the default figure size
         plt.rcParams["figure.figsize"] = (12, 8)
 
     def load_data(self, file_path=None):
@@ -148,12 +150,12 @@ class Visualization:
         """
         logger.info("Visualizing email volume over time")
 
-        # Check if date column exists and has valid data
+        # Check if the date column exists and has valid data
         if "date" not in df.columns or df["date"].isna().all():
             logger.warning("No date information available for email volume visualization")
             return None
 
-        # Convert date column to datetime if it's not already
+        # Convert the date column to datetime if it's not already
         if not pd.api.types.is_datetime64_any_dtype(df["date"]):
             try:
                 df["date"] = pd.to_datetime(df["date"], errors="coerce")
@@ -250,15 +252,19 @@ class Visualization:
 
         logger.info(f"Saved email volume visualization to {output_path}")
 
-        # Upload to Supabase
-        supabase_url = upload_to_supabase(output_path)
-        if supabase_url:
-            logger.info(f"Uploaded email volume visualization to Supabase: {supabase_url}")
-
-        return {
-            "supabase_url": supabase_url,
+        res_obj = {
+            "supabase_url": None,
             "output_path": output_path,
         }
+
+        if self.save_to_supabase:
+            # Upload to Supabase
+            supabase_url = upload_to_supabase(output_path)
+            if supabase_url:
+                logger.info(f"Uploaded email volume visualization to Supabase: {supabase_url}")
+                res_obj["supabase_url"] = supabase_url
+
+        return res_obj
 
     def visualize_email_network(self, df, max_nodes=100):
         """
@@ -365,15 +371,19 @@ class Visualization:
 
         logger.info(f"Saved email network visualization to {output_path}")
 
-        # Upload to Supabase
-        supabase_url = upload_to_supabase(output_path)
-        if supabase_url:
-            logger.info(f"Uploaded email network visualization to Supabase: {supabase_url}")
-
-        return {
-            "supabase_url": supabase_url,
+        res_obj = {
+            "supabase_url": None,
             "output_path": output_path,
         }
+
+        if self.save_to_supabase:
+            # Upload to Supabase
+            supabase_url = upload_to_supabase(output_path)
+            if supabase_url:
+                logger.info(f"Uploaded email network visualization to Supabase: {supabase_url}")
+                res_obj["supabase_url"] = supabase_url
+
+        return res_obj
 
     def visualize_topics(self, analysis_results):
         """
@@ -429,10 +439,18 @@ class Visualization:
         plt.savefig(output_path, dpi=300, bbox_inches="tight")
         plt.close()
 
-        # Upload static visualization to Supabase
-        supabase_url_static = upload_to_supabase(output_path)
-        if supabase_url_static:
-            logger.info(f"Uploaded topic visualization to Supabase: {supabase_url_static}")
+        res_obj = {
+            "supabase_url_static": None,
+            "supabase_url_html": None,
+            "output_path": output_path,
+        }
+
+        if self.save_to_supabase:
+            # Upload static visualization to Supabase
+            supabase_url_static = upload_to_supabase(output_path)
+            if supabase_url_static:
+                logger.info(f"Uploaded topic visualization to Supabase: {supabase_url_static}")
+                res_obj["supabase_url_static"] = supabase_url_static
 
         # Create an interactive visualization with Plotly
         html_path = None
@@ -474,22 +492,21 @@ class Visualization:
             fig.write_html(html_path)
             logger.info(f"Saved interactive topic visualization to {html_path}")
 
-            # Upload interactive visualization to Supabase
-            supabase_url_html = upload_to_supabase(html_path)
-            if supabase_url_html:
-                logger.info(
-                    f"Uploaded interactive topic visualization to Supabase: {supabase_url_html}"
-                )
+            if self.save_to_supabase:
+                # Upload interactive visualization to Supabase
+                supabase_url_html = upload_to_supabase(html_path)
+                if supabase_url_html:
+                    logger.info(
+                        f"Uploaded interactive topic visualization to Supabase: {supabase_url_html}"
+                    )
+                    res_obj["supabase_url_html"] = supabase_url_html
 
         except Exception as e:
             logger.error(f"Error creating interactive topic visualization: {e}")
 
         logger.info(f"Saved topic visualization to {output_path}")
 
-        return {
-            "supabase_url_static": supabase_url_static,
-            "output_path": output_path,
-        }
+        return res_obj
 
     def visualize_clusters(self, df, analysis_results):
         """
@@ -544,10 +561,18 @@ class Visualization:
         plt.savefig(output_path, dpi=300, bbox_inches="tight")
         plt.close()
 
-        # Upload cluster size visualization to Supabase
-        supabase_url_size = upload_to_supabase(output_path)
-        if supabase_url_size:
-            logger.info(f"Uploaded cluster size visualization to Supabase: {supabase_url_size}")
+        res_obj = {
+            "output_path": output_path,
+            "supabase_url_size": None,
+            "supabase_url_wordcloud": None,
+        }
+
+        if self.save_to_supabase:
+            # Upload cluster size visualization to Supabase
+            supabase_url_size = upload_to_supabase(output_path)
+            if supabase_url_size:
+                logger.info(f"Uploaded cluster size visualization to Supabase: {supabase_url_size}")
+                res_obj["supabase_url_size"] = supabase_url_size
 
         # Create word clouds for each cluster
         n_clusters = len(cluster_analysis)
@@ -580,19 +605,17 @@ class Visualization:
         plt.savefig(wordcloud_path, dpi=300, bbox_inches="tight")
         plt.close()
 
-        # Upload wordcloud visualization to Supabase
-        supabase_url_wordcloud = upload_to_supabase(wordcloud_path)
-        if supabase_url_wordcloud:
-            logger.info(
-                f"Uploaded cluster wordcloud visualization to Supabase: {supabase_url_wordcloud}"
-            )
+        if self.save_to_supabase:
+            # Upload wordcloud visualization to Supabase
+            supabase_url_wordcloud = upload_to_supabase(wordcloud_path)
+            if supabase_url_wordcloud:
+                logger.info(
+                    f"Uploaded cluster wordcloud visualization to Supabase: {supabase_url_wordcloud}"
+                )
+                res_obj["supabase_url_wordcloud"] = supabase_url_wordcloud
 
         logger.info(f"Saved cluster visualizations to {output_path} and {wordcloud_path}")
-        return {
-            "output_path": output_path,
-            "supabase_url_size": supabase_url_size,
-            "supabase_url_wordcloud": supabase_url_wordcloud,
-        }
+        return res_obj
 
     def visualize_entities(self, analysis_results):
         """
@@ -661,12 +684,19 @@ class Visualization:
 
         logger.info(f"Saved entity visualization to {output_path}")
 
-        # Upload to Supabase
-        supabase_url = upload_to_supabase(output_path)
-        if supabase_url:
-            logger.info(f"Uploaded entity visualization to Supabase: {supabase_url}")
+        res_obj = {
+            "supabase_url": None,
+            "output_path": output_path,
+        }
 
-        return {"supabase_url": supabase_url, "output_path": output_path}
+        if self.save_to_supabase:
+            # Upload to Supabase
+            supabase_url = upload_to_supabase(output_path)
+            if supabase_url:
+                logger.info(f"Uploaded entity visualization to Supabase: {supabase_url}")
+                res_obj["supabase_url"] = supabase_url
+
+        return res_obj
 
     def visualize_sentiment(self, analysis_results):
         """
@@ -715,12 +745,19 @@ class Visualization:
 
         logger.info(f"Saved sentiment visualization to {output_path}")
 
-        # Upload to Supabase
-        supabase_url = upload_to_supabase(output_path)
-        if supabase_url:
-            logger.info(f"Uploaded sentiment visualization to Supabase: {supabase_url}")
+        res_obj = {
+            "supabase_url": None,
+            "output_path": output_path,
+        }
 
-        return {"supabase_url": supabase_url, "output_path": output_path}
+        if self.save_to_supabase:
+            # Upload to Supabase
+            supabase_url = upload_to_supabase(output_path)
+            if supabase_url:
+                logger.info(f"Uploaded sentiment visualization to Supabase: {supabase_url}")
+                res_obj["supabase_url"] = supabase_url
+
+        return res_obj
 
     def create_kohonen_map(self, df, feature_cols=None, map_size=(20, 20)):
         """
@@ -821,33 +858,41 @@ class Visualization:
 
             logger.info("Saved Kohonen map visualizations")
 
-            # Upload to Supabase
-            supabase_url_umatrix = upload_to_supabase(u_matrix_path)
-            if supabase_url_umatrix:
-                logger.info(
-                    f"Uploaded SOM U-Matrix visualization to Supabase: {supabase_url_umatrix}"
-                )
+            res_obj = {
+                "u_matrix_path": u_matrix_path,
+                "component_path": component_path,
+                "hits_path": hits_path,
+                "supabase_url_components": None,
+                "supabase_url_hits": None,
+                "supabase_url_umatrix": None,
+            }
 
-            supabase_url_components = upload_to_supabase(component_path)
-            if supabase_url_components:
-                logger.info(
-                    f"Uploaded SOM Components visualization to Supabase: {supabase_url_components}"
-                )
+            if self.save_to_supabase:
+                # Upload to Supabase
+                supabase_url_umatrix = upload_to_supabase(u_matrix_path)
+                if supabase_url_umatrix:
+                    logger.info(
+                        f"Uploaded SOM U-Matrix visualization to Supabase: {supabase_url_umatrix}"
+                    )
+                    res_obj["supabase_url_umatrix"] = supabase_url_umatrix
 
-            supabase_url_hits = upload_to_supabase(hits_path)
-            if supabase_url_hits:
-                logger.info(f"Uploaded SOM Hits visualization to Supabase: {supabase_url_hits}")
+                supabase_url_components = upload_to_supabase(component_path)
+                if supabase_url_components:
+                    logger.info(
+                        f"Uploaded SOM Components visualization to Supabase: {supabase_url_components}"
+                    )
+                    res_obj["supabase_url_components"] = supabase_url_components
+
+                supabase_url_hits = upload_to_supabase(hits_path)
+                if supabase_url_hits:
+                    logger.info(f"Uploaded SOM Hits visualization to Supabase: {supabase_url_hits}")
+                    res_obj["supabase_url_hits"] = supabase_url_hits
 
             logger.info(
                 f"Saved Kohonen map visualizations to {u_matrix_path}, {component_path}, and {hits_path}"
             )
 
-            return {
-                "u_matrix_path": u_matrix_path,
-                "supabase_url_components": supabase_url_components,
-                "supabase_url_hits": supabase_url_hits,
-                "supabase_url_umatrix": supabase_url_umatrix,
-            }
+            return res_obj
 
         except Exception as e:
             print(e.with_traceback(None))
@@ -1046,7 +1091,8 @@ class Visualization:
             logger.error(f"Error creating dashboard: {e}")
             return None
 
-    def save_file_url_to_database(self, file_dict: dict[str, str]):
+    @staticmethod
+    def save_file_url_to_database(file_dict: dict[str, str]):
         """
         Save the file URL to the database.
         Args:
@@ -1153,8 +1199,9 @@ class Visualization:
                 )
                 supabase_paths["kohonen_map_hits"] = kohonen_path.get("supabase_url_hits")
 
-            # Save file URLs to database
-            self.save_file_url_to_database(supabase_paths)
+            # Save file URLs to the database
+            if self.save_to_supabase:
+                self.save_file_url_to_database(supabase_paths)
 
             # 8. Dashboard
             dashboard_path = self.create_dashboard(df, analysis_results)

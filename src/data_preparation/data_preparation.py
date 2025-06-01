@@ -7,9 +7,6 @@ import dateparser
 import pandas as pd
 from loguru import logger
 from tqdm import tqdm
-from typing_extensions import Match
-
-from src.utils.utils import save_to_postgresql
 
 
 class DataPreparation:
@@ -21,16 +18,18 @@ class DataPreparation:
     - Storing processed data
     """
 
-    def __init__(self, input_dir="./data/", output_dir="./processed_data/"):
+    def __init__(self, input_dir="./data/", output_dir="./processed_data/", save_to_db=False):
         """
         Initialize the DataPreparation class.
 
         Args:
             input_dir (str): Directory containing the email files
             output_dir (str): Directory to store processed data
+            save_to_db (bool): Whether to save processed data to PostgreSQL database
         """
         self.input_dir = input_dir
         self.output_dir = output_dir
+        self.save_to_db = save_to_db
 
         # Create an output directory if it doesn't exist
         if not os.path.exists(output_dir):
@@ -306,13 +305,9 @@ class DataPreparation:
 
         return extracted_emails
 
-    def process_all_emails(self, save_to_db: bool = True):
+    def process_all_emails(self):
         """
         Reads and processes all email files in the given folder and shows progress with stats.
-
-        Args:
-            save_to_db: Whether to save the processed data to PostgreSQL database
-            db_url: Database connection URL (if None, will use environment variable DATABASE_URL)
         """
         data = {
             "message_id": [],
@@ -394,10 +389,14 @@ class DataPreparation:
         df = pd.DataFrame(data)
 
         # Save to PostgreSQL if requested
-        if save_to_db:
+        if self.save_to_db:
             try:
                 logger.info("Saving processed emails to PostgreSQL database...")
-                self.save_to_postgresql(df, table_name="processed_emails")
+                table_name = "processed_emails"
+                success_message = f"\n✅ Saved {len(df)} rows to PostgreSQL table: {table_name}"
+                save_to_postgresql(
+                    df, table_name, if_exists="replace", success_message=success_message
+                )
             except Exception as e:
                 logger.error(f"Failed to save to PostgreSQL: {e}")
                 logger.info("Continuing without saving to database.")
@@ -422,24 +421,6 @@ class DataPreparation:
         output_path = os.path.join(self.output_dir, f"processed_data_{timestamp}.pkl")
         df.to_pickle(output_path)
         logger.success(f"\n✅ Saved {len(df)} cleaned emails to {output_path}")
-
-    @staticmethod
-    def save_to_postgresql(
-        df: pd.DataFrame,
-        table_name: str = "processed_emails",
-        if_exists: str = "replace",
-    ) -> None:
-        """
-        Save the DataFrame to a PostgreSQL database in Neon.
-
-        Args:
-            df: DataFrame to save
-            db_url: Database connection URL (if None, will use environment variable DATABASE_URL)
-            table_name: Name of the table to create/replace
-            if_exists: How to behave if the table already exists ('fail', 'replace', or 'append')
-        """
-        success_message = f"\n✅ Saved {len(df)} rows to PostgreSQL table: {table_name}"
-        save_to_postgresql(df, table_name, if_exists, success_message)
 
     def load_data(self, file_path: str | None = None):
         """Load the cleaned email dataframe from a pickle file."""

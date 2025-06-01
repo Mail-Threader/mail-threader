@@ -12,8 +12,6 @@ import pandas as pd
 from loguru import logger
 from nltk.corpus import stopwords
 
-from utils.utils import save_to_postgresql
-
 # Download necessary NLTK resources
 try:
     nltk.download("punkt", quiet=True)
@@ -657,27 +655,27 @@ class StoryDevelopment:
         """
         html = (
             """
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Enron Email Stories</title>
-                <style>
-                    body { font-family: Arial, sans-serif; margin: 20px; }
-                    h1 { color: #2c3e50; }
-                    h2 { color: #3498db; margin-top: 30px; }
-                    .story { border: 1px solid #ddd; padding: 15px; margin-bottom: 20px; border-radius: 5px; }
-                    .story-title { font-size: 1.2em; font-weight: bold; margin-bottom: 10px; }
-                    .story-summary { margin-bottom: 15px; }
-                    .story-details { font-size: 0.9em; color: #555; }
-                    .key-actor { background-color: #e8f4f8; }
-                    .significant-event { background-color: #f8f4e8; }
-                    .email-thread { background-color: #f4f8e8; }
-                    .topic-evolution { background-color: #f8e8f4; }
-                </style>
-            </head>
-            <body>
-                <h1>Enron Email Stories</h1>
-                <p>Generated on """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Enron Email Stories</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 20px; }
+                        h1 { color: #2c3e50; }
+                        h2 { color: #3498db; margin-top: 30px; }
+                        .story { border: 1px solid #ddd; padding: 15px; margin-bottom: 20px; border-radius: 5px; }
+                        .story-title { font-size: 1.2em; font-weight: bold; margin-bottom: 10px; }
+                        .story-summary { margin-bottom: 15px; }
+                        .story-details { font-size: 0.9em; color: #555; }
+                        .key-actor { background-color: #e8f4f8; }
+                        .significant-event { background-color: #f8f4e8; }
+                        .email-thread { background-color: #f4f8e8; }
+                        .topic-evolution { background-color: #f8e8f4; }
+                    </style>
+                </head>
+                <body>
+                    <h1>Enron Email Stories</h1>
+                    <p>Generated on """
             + datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             + """</p>
         """

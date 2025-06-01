@@ -3,19 +3,16 @@ pandas
 numpy
 nltk
 scikit-learn
-# gensim
 transformers
 matplotlib
 seaborn
 plotly
 networkx
-beautifulsoup4
 wordcloud
 sompy-package
-loguru
-tqdm
 dateparser
-python-dotenv
+spacy
+tf-keras
 
 # Database
 psycopg2-binary
@@ -23,14 +20,13 @@ sqlalchemy
 supabase
 
 # Development tools
-# Linting and formatting
+loguru
+tqdm
+beautifulsoup4
+python-dotenv
 
 # Testing
 pytest
 
-# Documentation
-
 # Build tools
 setuptools
-
-spacy

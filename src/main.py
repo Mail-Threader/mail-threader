@@ -143,11 +143,12 @@ def run_summarization_classification(_, dirs, skip=False):
     if skip:
         logger.info("Skipping summarization and classification step...")
         df = analyzer.load_data(skip=True)
+        analyzer.save_to_json(df)
         return df
     logger.info("Running summarization and classification step...")
 
-    df = analyzer.process_data()
-    analyzer.save_to_json(df)
+    df = analyzer.analyze_emails()
+    # analyzer.save_to_json(df)
     logger.info(f"Processed {len(df)} emails")
     return df
 
@@ -176,7 +177,6 @@ def run_visualization(df, analysis_results, dirs, skip=False):
         output_dir=dirs["visualizations_dir"],
     )
     visualization_paths = visualizer.visualize_all(df, analysis_results)
-    logger.info(f"Generated {len(visualization_paths)} visualizations")
     return visualization_paths
 
 
