@@ -45,12 +45,8 @@ def parse_arguments():
         action="store_true",
         help="Skip summarization and classification (use existing analysis results)",
     )
-    parser.add_argument(
-        "--skip-visualization", action="store_true", help="Skip visualization step"
-    )
-    parser.add_argument(
-        "--skip-stories", action="store_true", help="Skip story development step"
-    )
+    parser.add_argument("--skip-visualization", action="store_true", help="Skip visualization step")
+    parser.add_argument("--skip-stories", action="store_true", help="Skip story development step")
 
     return parser.parse_args()
 
@@ -112,9 +108,10 @@ def run_data_preparation(dirs, skip=False):
     if skip:
         logger.info("Skipping data preparation step...")
         # Try to load existing processed data
-        DataPreparation(
+        data_prep = DataPreparation(
             input_dir=dirs["data_dir"], output_dir=dirs["processed_data_dir"]
         )
+        return
         # try:
         #     df = data_prep.load_data()
         #     logger.info(f"Loaded processed data with {len(df)} emails")
@@ -123,9 +120,7 @@ def run_data_preparation(dirs, skip=False):
         #     logger.warning("No processed data found. Running data preparation step...")
 
     logger.info("Running data preparation step...")
-    data_prep = DataPreparation(
-        input_dir=dirs["data_dir"], output_dir=dirs["processed_data_dir"]
-    )
+    data_prep = DataPreparation(input_dir=dirs["data_dir"], output_dir=dirs["processed_data_dir"])
     df = data_prep.process_all_emails()
     data_prep.save_to_pickle(df)
     data_prep.save_to_json(df)
@@ -190,12 +185,12 @@ def run_visualization(df, analysis_results, dirs, skip=False):
         return {}
 
     logger.info("Running visualization step...")
-    Visualization(
-        input_dir=dirs["processed_data_dir"],
-        analysis_dir=dirs["analysis_results_dir"],
+    visualizer = Visualization(
+        input_dir=dirs["analysis_results_dir"],
+        #        analysis_dir=dirs["analysis_results_dir"],
         output_dir=dirs["visualizations_dir"],
     )
-    # visualization_paths = visualizer.visualize_all(df, analysis_results)
+    visualization_paths = visualizer.visualize_all()
     # logger.info(f"Generated {len(visualization_paths)} visualizations")
     # return visualization_paths
 
@@ -228,9 +223,7 @@ def run_story_development(df, analysis_results, dirs, skip=False):
     # return stories
 
 
-def generate_report(
-    dirs, data_results, analysis_results, visualization_paths, story_results
-):
+def generate_report(dirs, data_results, analysis_results, visualization_paths, story_results):
     """
     Generate a final HTML report.
 
@@ -261,14 +254,10 @@ def main():
     # Run each step of the pipeline
     df = run_data_preparation(dirs, args.skip_data_prep)
     analysis_results = run_summarization_classification(df, dirs, args.skip_analysis)
-    visualization_paths = run_visualization(
-        df, analysis_results, dirs, args.skip_visualization
-    )
+    visualization_paths = run_visualization(df, analysis_results, dirs, args.skip_visualization)
     story_results = run_story_development(df, analysis_results, dirs, args.skip_stories)
     # Generate a final report
-    report_path = generate_report(
-        dirs, df, analysis_results, visualization_paths, story_results
-    )
+    report_path = generate_report(dirs, df, analysis_results, visualization_paths, story_results)
     logger.info(f"Pipeline completed. Final report available at {report_path}")
 
 
