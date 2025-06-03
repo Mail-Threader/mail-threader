@@ -279,5 +279,5 @@ def main():
     #report_path = generate_report(dirs, df, analysis_results, visualization_paths, story_results)
     #logger.info(f"Pipeline completed. Final report available at {report_path}")
 
-if __name__ == "_main_":
+if __name__ == "__main__":
     main()

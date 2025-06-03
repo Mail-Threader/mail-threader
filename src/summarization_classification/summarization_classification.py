@@ -27,7 +27,7 @@ class SummarizationClassification:
     - Sentiment analysis
     - Text summarization
     """
-    def _init_(self, input_dir="./processed_data/", output_dir="./analysis_results/"):
+    def __init__(self, input_dir="./processed_data/", output_dir="./analysis_results/"):
         """
         Initialize the SummarizationClassification object with input and output directories.
         Loads the spaCy NER model and Hugging Face sentiment pipeline.
@@ -71,7 +71,6 @@ class SummarizationClassification:
         text = re.sub(r'[^\w\s]', '', text)                     # remove punctuation
         text = re.sub(r'\s+', ' ', text)
         return text.strip()
-
 
     def clean_text_column(self, df, column="body", new_column="clean_body"):
         """
