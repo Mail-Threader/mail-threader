@@ -12,7 +12,6 @@ from visualization import Visualization
 default_data_dir = os.path.join(os.getcwd(), "data")
 default_output_dir = os.path.join(os.getcwd(), "output")
 
-
 def parse_arguments():
     """
     Parse command line arguments.
@@ -54,7 +53,7 @@ def setup_directories(args):
     root = os.getcwd()
 
     processed_data_dir = os.path.join(root, "src", "data_preparation")  # point to where the file actually is
-    analysis_results_dir = os.path.join(args.output_dir, "analysis_results")
+    analysis_results_dir = os.path.join(args.output_dir, "summarization_classification")
     visualizations_dir = os.path.join(args.output_dir, "visualizations")
     stories_dir = os.path.join(args.output_dir, "stories")
 
@@ -90,7 +89,7 @@ def setup_directories(args):
 
     # Create subdirectories for each step
     processed_data_dir = os.path.join(args.output_dir, "processed_data")
-    analysis_results_dir = os.path.join(args.output_dir, "summarization_results")
+    analysis_results_dir = os.path.join(args.output_dir, "analysis_results")
     visualizations_dir = os.path.join(args.output_dir, "visualizations")
     stories_dir = os.path.join(args.output_dir, "stories")
 
@@ -143,7 +142,7 @@ def run_data_preparation(dirs, skip=False):
     # return df
 
 
-def run_summarization_classification(_, dirs, skip=False):
+def run_summarization_classification(_, dirs, skip=False, limit=None):
     """
     Run the summarization and classification step.
 
@@ -167,8 +166,12 @@ def run_summarization_classification(_, dirs, skip=False):
     )
 
     df = analyzer.load_json_emails("clean_emails.json")
+    if limit:
+        df = df.head(limit)
+
     df = analyzer.clean_text_column(df)
     df = analyzer.tokenize_column(df, text_column="clean_body")
+    df["clean_body"] = df["clean_body"].apply(lambda x: analyzer.preprocess_text(x))
     X, vectorizer = analyzer.vectorize_document(df["clean_body"])
     model, labels = analyzer.cluster_documents(X, method="kmeans", n_clusters=5)
     df["cluster"] = labels
@@ -180,9 +183,9 @@ def run_summarization_classification(_, dirs, skip=False):
     df = analyzer.analyze_sentiment(df)
     summary = analyzer.summarize_corpus(df)
     print("Corpus Summary:\n", summary)
-    #analyzer.save_to_csv(df, "email_analysis_results.csv")
+    #analyzer.save_to_csv(df, "email_summarization_results.csv")
     analyzer.save_to_sqlite(df)
-    #analyzer.save_to_json(df, "email_analysis_results.json")
+    analyzer.save_to_json(df, "email_summarization_results.json")
 
 def run_visualization(df, analysis_results, dirs, skip=False):
     """
@@ -210,7 +213,6 @@ def run_visualization(df, analysis_results, dirs, skip=False):
     # visualization_paths = visualizer.visualize_all(df, analysis_results)
     # logger.info(f"Generated {len(visualization_paths)} visualizations")
     # return visualization_paths
-
 
 def run_story_development(df, analysis_results, dirs, skip=False):
     """
@@ -269,14 +271,13 @@ def main():
     dirs = setup_directories(args)
 
     # Run each step of the pipeline
-    df = run_data_preparation(dirs, args.skip_data_prep)
-    analysis_results = run_summarization_classification(df, dirs, args.skip_analysis)
-    visualization_paths = run_visualization(df, analysis_results, dirs, args.skip_visualization)
-    story_results = run_story_development(df, analysis_results, dirs, args.skip_stories)
+    #df = run_data_preparation(dirs, args.skip_data_prep)
+    analysis_results = run_summarization_classification(None, dirs, args.skip_analysis, limit=50)
+    #visualization_paths = run_visualization(df, analysis_results, dirs, args.skip_visualization)
+    #story_results = run_story_development(df, analysis_results, dirs, args.skip_stories)
     # Generate a final report
-    report_path = generate_report(dirs, df, analysis_results, visualization_paths, story_results)
-    logger.info(f"Pipeline completed. Final report available at {report_path}")
+    #report_path = generate_report(dirs, df, analysis_results, visualization_paths, story_results)
+    #logger.info(f"Pipeline completed. Final report available at {report_path}")
 
-
-if __name__ == "__main__":
+if __name__ == "_main_":
     main()

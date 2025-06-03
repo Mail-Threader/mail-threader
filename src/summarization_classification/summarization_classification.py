@@ -1,4 +1,3 @@
- # from loguru import logger
 import os
 import json
 import pandas as pd
@@ -12,9 +11,10 @@ from sklearn.metrics.pairwise import cosine_similarity
 import spacy
 from transformers import pipeline as hf_pipeline
 import sqlite3
+import re
 
 nltk.download("punkt")
-nltk.download('punkt_tab')
+#nltk.download('punkt_tab')
 
 
 class SummarizationClassification:
@@ -27,23 +27,27 @@ class SummarizationClassification:
     - Sentiment analysis
     - Text summarization
     """
-
-    def __init__(self, input_dir="./processed_data/", output_dir="./analysis_results/"):
+    def _init_(self, input_dir="./processed_data/", output_dir="./analysis_results/"):
         """
-        Initialize the SummarizationClassification class.
-
-        Args:
-            input_dir (str): Directory containing processed email data
-            output_dir (str): Directory to store analysis results
+        Initialize the SummarizationClassification object with input and output directories.
+        Loads the spaCy NER model and Hugging Face sentiment pipeline.
         """
-        self.ner_model = spacy.load("en_core_web_sm")
-        
         self.input_dir = input_dir
         self.output_dir = output_dir
 
-        # Create output directory if it doesn't exist
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
+
+        self.ner_model = spacy.load("en_core_web_sm")
+        self.sentiment_pipeline = hf_pipeline("sentiment-analysis")
+
+    CUSTOM_STOPWORDS = {
+        'thanks', 'fyi', 'attached', 'mail', 'doc', 'com', 'xls', 'pdf',
+        'sent', '20', '2001', '11', '713', 'http', 'www', "said", "new", "email", "shes",
+        "message", "original", "mailto", "subject", "thursday", "state", "november", "heres", "look",
+        "jones", "lay", "enron"
+    }
+
     def load_json_emails(self, filename="clean_emails.json"):
         """
         Loads email data from a JSON file.
@@ -58,6 +62,15 @@ class SummarizationClassification:
         with open(full_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         return pd.DataFrame(data)
+
+    def preprocess_text(self, text: str) -> str:
+        text = text.lower()
+        text = re.sub(r'\b[\w\.-]+@[\w\.-]+\.\w+\b', '', text)  # remove emails
+        text = re.sub(r'http\S+|www\S+', '', text)              # remove URLs
+        text = re.sub(r'\b\d+\b', '', text)                     # remove standalone numbers
+        text = re.sub(r'[^\w\s]', '', text)                     # remove punctuation
+        text = re.sub(r'\s+', ' ', text)
+        return text.strip()
 
 
     def clean_text_column(self, df, column="body", new_column="clean_body"):
@@ -85,19 +98,26 @@ class SummarizationClassification:
         return df
 
     def vectorize_document(self, documents, max_features=5000):
-        """
-        Vectorizes a list of text documents using TF-IDF.
+        # Preprocess documents first
+        cleaned_docs = [self.preprocess_text(doc) for doc in documents]
 
-        Args:
-            documents: List or Series of strings (documents).
-            max_features: Max number of features to keep in the vocabulary.
+        # Vectorizer with custom token pattern and stopwords
+        vectorizer = TfidfVectorizer(
+            stop_words='english',
+            max_features=max_features,
+            token_pattern=r'(?u)\b[a-zA-Z]{3,}\b',  # keeps words with 3+ letters only
+        )
+        tfidf_matrix = vectorizer.fit_transform(cleaned_docs)
 
-        Returns:
-            tfidf_matrix: Sparse matrix of TF-IDF features.
-            vectorizer: The fitted TfidfVectorizer instance.
-        """
-        vectorizer = TfidfVectorizer(stop_words='english', max_features=max_features)
-        tfidf_matrix = vectorizer.fit_transform(documents)
+        # Manually filter out additional custom stopwords
+        terms = np.array(vectorizer.get_feature_names_out())
+        valid_indices = [i for i, term in enumerate(terms) if term not in self.CUSTOM_STOPWORDS]
+
+        if valid_indices:
+            tfidf_matrix = tfidf_matrix[:, valid_indices]
+            filtered_terms = terms[valid_indices]
+            vectorizer.vocabulary_ = {term: i for i, term in enumerate(filtered_terms)}
+
         return tfidf_matrix, vectorizer
 
     def create_vectorizer_model_pipeline(self, num_clusters=5):
@@ -119,25 +139,19 @@ class SummarizationClassification:
     def generate_cluster_topics(self, documents, labels, tfidf_matrix, vectorizer, top_n=6):
         """
         Generates top keywords per cluster/topic.
-
-        Args:
-            documents: The list of text documents.
-            labels: Cluster labels assigned to each document.
-            tfidf_matrix: TF-IDF feature matrix.
-            vectorizer: Fitted TfidfVectorizer.
-            top_n: Number of top words to return per cluster.
-
-        Returns:
-            Dictionary of cluster_id -> list of top keywords.
         """
-        terms = np.array(vectorizer.get_feature_names_out())
+        terms = np.array(list(vectorizer.vocabulary_.keys()))
         topics = {}
         for cluster_id in sorted(set(labels)):
             mask = np.array(labels) == cluster_id
+            if not np.any(mask):
+                topics[cluster_id] = []
+                continue
             cluster_matrix = tfidf_matrix[mask].mean(axis=0)
             top_indices = cluster_matrix.A1.argsort()[::-1][:top_n]
             topics[cluster_id] = terms[top_indices].tolist()
         return topics
+
 
     def extract_top_words(self, tfidf_matrix, vectorizer, top_n=10):
         """
@@ -158,12 +172,10 @@ class SummarizationClassification:
     def cluster_documents(self, tfidf_matrix, method="kmeans", **kwargs):
         """
         Clusters documents using the specified method (KMeans or DBSCAN).
-
         Args:
             tfidf_matrix: TF-IDF matrix.
             method: 'kmeans' or 'dbscan'
             kwargs: Additional arguments for the clustering model.
-
         Returns:
             Fitted model and cluster labels.
         """
@@ -179,11 +191,9 @@ class SummarizationClassification:
     def extract_entities(self, df: pd.DataFrame, text_column: str = "body") -> pd.DataFrame:
         """
         Extract named entities (PERSON, ORG, GPE) from a text column.
-
         Args:
             df: DataFrame containing text data.
             text_column: Column with the text to process.
-
         Returns:
             DataFrame with additional columns for persons, organizations, and locations.
         """
@@ -259,7 +269,7 @@ class SummarizationClassification:
         output_path = os.path.join(self.output_dir, filename)
         df.to_json(output_path, orient="records", indent=4)
 
-    def save_to_sqlite(self, df, db_filename="analysis_results.db", table_name="emails"):
+    def save_to_sqlite(self, df, db_filename="summarization_results.db", table_name="emails"):
         db_path = os.path.join(self.output_dir, db_filename)
 
         # Convert list columns (like persons/orgs/locations) to comma-separated strings
@@ -272,8 +282,8 @@ class SummarizationClassification:
         df.to_sql(table_name, conn, if_exists="replace", index=False)
         conn.close()
 
-# Main execution block
-if __name__ == "__main__":
+# Main block for independant execution
+""" if _name_ == "_main_":
     # Create SummarizationClassification instance
     analyzer = SummarizationClassification()
 
@@ -291,5 +301,5 @@ if __name__ == "__main__":
     df = analyzer.analyze_sentiment(df)
     summary = analyzer.summarize_corpus(df)
     print("Corpus Summary:\n", summary)
-    analyzer.save_to_csv(df, "email_analysis_results.csv")   
-    print("Done!")
+    analyzer.save_to_csv(df, "email_analysis_results.csv")
+    print("Done!") """
