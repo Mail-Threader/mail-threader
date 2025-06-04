@@ -14,8 +14,7 @@ class StoryDevelopment:
 
     def __init__(
         self,
-        input_dir="./processed_data/",
-        analysis_dir="./analysis_results/",
+        input_dir="./analysis_results/",
         output_dir="./stories/",
     ):
         """
@@ -27,7 +26,6 @@ class StoryDevelopment:
             output_dir (str): Directory to store generated stories
         """
         self.input_dir = input_dir
-        self.analysis_dir = analysis_dir
         self.output_dir = output_dir
 
         # Create output directory if it doesn't exist

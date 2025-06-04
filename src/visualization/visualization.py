@@ -15,8 +15,7 @@ class Visualization:
 
     def __init__(
         self,
-        input_dir="./processed_data/",
-        analysis_dir="./analysis_results/",
+        input_dir="./analysis_results/",
         output_dir="./visualizations/",
     ):
         """
@@ -28,7 +27,6 @@ class Visualization:
             output_dir (str): Directory to store visualizations
         """
         self.input_dir = input_dir
-        self.analysis_dir = analysis_dir
         self.output_dir = output_dir
 
         # Create output directory if it doesn't exist

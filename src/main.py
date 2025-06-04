@@ -181,8 +181,7 @@ def run_visualization(df, analysis_results, dirs, skip=False):
 
     logger.info("Running visualization step...")
     Visualization(
-        input_dir=dirs["processed_data_dir"],
-        analysis_dir=dirs["analysis_results_dir"],
+        input_dir=dirs["analysis_results_dir"],
         output_dir=dirs["visualizations_dir"],
     )
     # visualization_paths = visualizer.visualize_all(df, analysis_results)
@@ -209,8 +208,7 @@ def run_story_development(df, analysis_results, dirs, skip=False):
 
     logger.info("Running story development step...")
     StoryDevelopment(
-        input_dir=dirs["processed_data_dir"],
-        analysis_dir=dirs["analysis_results_dir"],
+        input_dir=dirs["analysis_results_dir"],
         output_dir=dirs["stories_dir"],
     )
     # stories = story_developer.develop_stories(df, analysis_results)
