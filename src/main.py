@@ -176,13 +176,13 @@ def run_summarization_classification(_, dirs, skip=False, limit=None):
     model, labels = analyzer.cluster_documents(X, method="kmeans", n_clusters=5)
     df["cluster"] = labels
     topics = analyzer.generate_cluster_topics(df["clean_body"], labels, X, vectorizer)
-    print("Cluster Topics:", topics)
+    logger.info("Cluster Topics:", topics)
     top_words = analyzer.extract_top_words(X, vectorizer)
-    print("Top overall words:", top_words)
+    logger.info("Top overall words:", top_words)
     df = analyzer.extract_entities(df)
     df = analyzer.analyze_sentiment(df)
     summary = analyzer.summarize_corpus(df)
-    print("Corpus Summary:\n", summary)
+    logger.info("Corpus Summary:\n", summary)
     #analyzer.save_to_csv(df, "email_summarization_results.csv")
     analyzer.save_to_sqlite(df)
     analyzer.save_to_json(df, "email_summarization_results.json")
@@ -271,13 +271,13 @@ def main():
     dirs = setup_directories(args)
 
     # Run each step of the pipeline
-    #df = run_data_preparation(dirs, args.skip_data_prep)
+    df = run_data_preparation(dirs, args.skip_data_prep)
     analysis_results = run_summarization_classification(None, dirs, args.skip_analysis, limit=50)
-    #visualization_paths = run_visualization(df, analysis_results, dirs, args.skip_visualization)
-    #story_results = run_story_development(df, analysis_results, dirs, args.skip_stories)
+    visualization_paths = run_visualization(df, analysis_results, dirs, args.skip_visualization)
+    story_results = run_story_development(df, analysis_results, dirs, args.skip_stories)
     # Generate a final report
-    #report_path = generate_report(dirs, df, analysis_results, visualization_paths, story_results)
-    #logger.info(f"Pipeline completed. Final report available at {report_path}")
+    report_path = generate_report(dirs, df, analysis_results, visualization_paths, story_results)
+    logger.info(f"Pipeline completed. Final report available at {report_path}")
 
 if __name__ == "__main__":
     main()

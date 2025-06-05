@@ -2,13 +2,16 @@ import os
 import json
 import pandas as pd
 import numpy as np
+
 import nltk
 from nltk.tokenize import word_tokenize, sent_tokenize
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.pipeline import Pipeline
 from sklearn.cluster import KMeans, DBSCAN
 from sklearn.metrics.pairwise import cosine_similarity
+from loguru import logger
 import spacy
+import spacy.cli.download as download
 from transformers import pipeline as hf_pipeline
 import sqlite3
 import re
@@ -38,7 +41,12 @@ class SummarizationClassification:
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
-        self.ner_model = spacy.load("en_core_web_sm")
+        try:
+            self.ner_model = spacy.load("en_core_web_sm")
+        except OSError as e:
+            logger.info("Model not found. Downloading...")
+            download("en_core_web_sm")
+            self.ner_model = spacy.load("en_core_web_sm")
         self.sentiment_pipeline = hf_pipeline("sentiment-analysis")
 
     CUSTOM_STOPWORDS = {
@@ -65,10 +73,6 @@ class SummarizationClassification:
 
     def preprocess_text(self, text: str) -> str:
         text = text.lower()
-        text = re.sub(r'\b[\w\.-]+@[\w\.-]+\.\w+\b', '', text)  # remove emails
-        text = re.sub(r'http\S+|www\S+', '', text)              # remove URLs
-        text = re.sub(r'\b\d+\b', '', text)                     # remove standalone numbers
-        text = re.sub(r'[^\w\s]', '', text)                     # remove punctuation
         text = re.sub(r'\s+', ' ', text)
         return text.strip()
 
@@ -258,11 +262,6 @@ class SummarizationClassification:
         summary = " ".join([sentences[i] for i in top_indices])
         return summary
 
-    def save_to_csv(self, df, filename):
-        """
-        Save the DataFrame to a CSV file in the output directory.
-        """
-        df.to_csv(os.path.join(self.output_dir, filename), index=False)
 
     def save_to_json(self, df, filename):
         output_path = os.path.join(self.output_dir, filename)
