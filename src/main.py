@@ -272,7 +272,7 @@ def main():
 
     # Run each step of the pipeline
     df = run_data_preparation(dirs, args.skip_data_prep)
-    analysis_results = run_summarization_classification(None, dirs, args.skip_analysis, limit=50)
+    analysis_results = run_summarization_classification(None, dirs, args.skip_analysis,)
     visualization_paths = run_visualization(df, analysis_results, dirs, args.skip_visualization)
     story_results = run_story_development(df, analysis_results, dirs, args.skip_stories)
     # Generate a final report
