@@ -1,7 +1,9 @@
 import argparse
 import os
+import time
 
 from loguru import logger
+from tqdm import tqdm
 
 # Import the four main modules
 from data_preparation import DataPreparation
@@ -177,13 +179,25 @@ def run_summarization_classification(_, dirs, skip=False, limit=None):
     model, labels = analyzer.cluster_documents(X, method="kmeans", n_clusters=5)
     df["cluster"] = labels
     topics = analyzer.generate_cluster_topics(df["clean_body"], labels, X, vectorizer)
-    logger.info("Cluster Topics:", topics)
+    logger.info(f"Cluster Topics: {topics}")
     top_words = analyzer.extract_top_words(X, vectorizer)
-    logger.info("Top overall words:", top_words)
+    logger.info(f"Top overall words: {top_words}")
+    start = time.time()
     df = analyzer.extract_entities(df)
+    end = time.time()
+    logger.info(f"NER extraction took: {end - start:.2f} seconds" )
+
+    start = time.time()
     df = analyzer.analyze_sentiment(df)
+    end = time.time()
+    logger.info(f"Sentiment analysis took: {end - start:.2f} seconds" )
+
+    start = time.time()
     summary = analyzer.summarize_corpus(df)
-    logger.info("Corpus Summary:\n", summary)
+    end = time.time()
+    logger.info(f"Corpus Summary:\n {summary}")
+    logger.info(f"Summary took: {end - start:.2f} seconds" )
+
     #analyzer.save_to_csv(df, "email_summarization_results.csv")
     analyzer.save_to_sqlite(df)
     analyzer.save_to_json(df, "email_summarization_results.json")
@@ -273,7 +287,7 @@ def main():
 
     # Run each step of the pipeline
     df = run_data_preparation(dirs, args.skip_data_prep)
-    analysis_results = run_summarization_classification(None, dirs, args.skip_analysis, limit=10)
+    analysis_results = run_summarization_classification(None, dirs, args.skip_analysis, limit=3000)
     visualization_paths = run_visualization(df, analysis_results, dirs, args.skip_visualization)
     story_results = run_story_development(df, analysis_results, dirs, args.skip_stories)
     # Generate a final report

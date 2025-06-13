@@ -15,6 +15,8 @@ import spacy.cli.download as download
 from transformers import pipeline as hf_pipeline
 import sqlite3
 import re
+from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor
 
 nltk.download("punkt")
 #nltk.download('punkt_tab')
@@ -43,6 +45,7 @@ class SummarizationClassification:
 
         try:
             self.ner_model = spacy.load("en_core_web_sm")
+            self.ner_model.max_length = 2_000_000 # increase max length (in characters)
         except OSError as e:
             logger.info("Model not found. Downloading...")
             download("en_core_web_sm")
@@ -210,60 +213,66 @@ class SummarizationClassification:
         labels = model.fit_predict(tfidf_matrix)
         return model, labels
 
-    def extract_entities(self, df: pd.DataFrame, text_column: str = "body") -> pd.DataFrame:
+
+
+    def extract_entities(self, df: pd.DataFrame, text_column: str = "body", chunk_size=500_000) -> pd.DataFrame:
         """
-        Extract named entities (PERSON, ORG, GPE) from a text column.
-        Args:
-            df: DataFrame containing text data.
-            text_column: Column with the text to process.
-        Returns:
-            DataFrame with additional columns for persons, organizations, and locations.
+        Extract named entities (PERSON, ORG, GPE) from a text column using threading + chunking.
         """
-        def ner_extract(text):
-            doc = self.ner_model(text)
-            persons = [ent.text for ent in doc.ents if ent.label_ == "PERSON"]
-            orgs = [ent.text for ent in doc.ents if ent.label_ == "ORG"]
-            locations = [ent.text for ent in doc.ents if ent.label_ == "GPE"]
+        def extract_single(text):
+            persons, orgs, locations = [], [], []
+            chunks = [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
+            for chunk in chunks:
+                try:
+                    doc = self.ner_model(chunk)
+                    persons.extend([ent.text for ent in doc.ents if ent.label_ == "PERSON"])
+                    orgs.extend([ent.text for ent in doc.ents if ent.label_ == "ORG"])
+                    locations.extend([ent.text for ent in doc.ents if ent.label_ == "GPE"])
+                except Exception:
+                    continue
             return pd.Series([persons, orgs, locations])
-        df[['persons', 'organizations', 'locations']] = df[text_column].fillna("").apply(ner_extract)
+        df[['persons', 'organizations', 'locations']] = df[text_column].fillna("").apply(extract_single)
         return df
 
-    def analyze_sentiment(self, df: pd.DataFrame, text_column: str = "body") -> pd.DataFrame:
+
+    def analyze_sentiment(self, df: pd.DataFrame, text_column: str = "body", batch_size: int = 32, max_length: int = 512) -> pd.DataFrame:
         """
-        Performs sentiment analysis using HuggingFace Transformers pipeline.
+
+        Performs sentiment analysis on text data using batching and truncation.
 
         Args:
-            df: Input DataFrame with text.
-            text_column: Column to analyze.
+            df: DataFrame containing the text data.
+            text_column: Column in the DataFrame with text.
+            batch_size: Number of samples to process at once.
+            max_length: Maximum length of input per text item.
 
         Returns:
             DataFrame with a new 'sentiment' column.
         """
-        df = df.copy()
-        def get_sentiment(text):
+        texts = df[text_column].fillna("").apply(lambda x: x[:max_length]).tolist()
+        sentiments = []
+
+        for i in tqdm(range(0, len(texts), batch_size), desc="Analyzing Sentiment"):
+            batch = texts[i:i + batch_size]
             try:
-                result = self.sentiment_pipeline(text[:512])[0]
-                return result['label']
-            except Exception:
-                return "ERROR"
-        df['sentiment'] = df[text_column].fillna("").apply(get_sentiment)
+                results = self.sentiment_pipeline(batch, truncation=True)
+                batch_sentiments = [res['label'] if isinstance(res, dict) else "ERROR" for res in results]
+            except Exception as e:
+                batch_sentiments = ["ERROR"] * len(batch)
+            sentiments.extend(batch_sentiments)
+
+        df = df.copy()
+        df['sentiment'] = sentiments
         return df
 
     def summarize_corpus(self, df: pd.DataFrame, text_column: str = "body", max_sentences: int = 5, max_input_sentences: int = 1000) -> str:
         """
         Generates an extractive summary from the full corpus using TF-IDF and cosine similarity.
-        Limits the number of input sentences to avoid memory issues.
-
-        Args:
-            df: Input DataFrame.
-            text_column: Column containing text.
-            max_sentences: Max number of summary sentences to return.
-            max_input_sentences: Max number of input sentences to consider.
-
-        Returns:
-            A summary string.
+        Trims text to avoid exceeding spaCy/max input memory limits..
         """
+
         full_text = " ".join(df[text_column].dropna())
+        full_text = full_text[:1_000_000] # salfly limit the length to avoid spaCy issues
         sentences = sent_tokenize(full_text)
 
         if len(sentences) > max_input_sentences:
