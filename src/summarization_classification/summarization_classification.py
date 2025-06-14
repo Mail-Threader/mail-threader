@@ -19,7 +19,6 @@ from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
 
 nltk.download("punkt")
-#nltk.download('punkt_tab')
 
 
 class SummarizationClassification:
@@ -232,7 +231,6 @@ class SummarizationClassification:
         df[['persons', 'organizations', 'locations']] = df[text_column].fillna("").apply(extract_single)
         return df
 
-
     def analyze_sentiment(self, df: pd.DataFrame, text_column: str = "body", batch_size: int = 32, max_length: int = 512) -> pd.DataFrame:
         """
 
@@ -339,7 +337,6 @@ class SummarizationClassification:
             return summary_df
 
         return summary
-
 
     def save_to_json(self, df, filename):
         output_path = os.path.join(self.output_dir, filename)
