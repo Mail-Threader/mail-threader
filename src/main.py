@@ -14,6 +14,8 @@ from visualization import Visualization
 default_data_dir = os.path.join(os.getcwd(), "data")
 default_output_dir = os.path.join(os.getcwd(), "output")
 
+LIMIT = 150
+
 def parse_arguments():
     """
     Parse command line arguments.
@@ -156,6 +158,7 @@ def run_summarization_classification(_, dirs, skip=False, limit=None):
     Returns:
         dict: Dictionary containing analysis results.
     """
+
     if skip:
         logger.info("Skipping summarization and classification step...")
         return
@@ -193,13 +196,15 @@ def run_summarization_classification(_, dirs, skip=False, limit=None):
     logger.info(f"Sentiment analysis took: {end - start:.2f} seconds" )
 
     start = time.time()
-    summary = analyzer.summarize_corpus(df)
+    summary_df = analyzer.summarize_corpus(df, num_emails=LIMIT, return_dataframe=True)
+    summary = analyzer.summarize_corpus(df, num_emails=LIMIT, return_dataframe=False)
     end = time.time()
     logger.info(f"Corpus Summary:\n {summary}")
+
+    logger.info(f"Summary Dataframe:\n {summary_df.head()}")
     logger.info(f"Summary took: {end - start:.2f} seconds" )
 
-    #analyzer.save_to_csv(df, "email_summarization_results.csv")
-    analyzer.save_to_sqlite(df)
+
     analyzer.save_to_json(df, "email_summarization_results.json")
 
 def run_visualization(df, analysis_results, dirs, skip=False):
@@ -287,7 +292,7 @@ def main():
 
     # Run each step of the pipeline
     df = run_data_preparation(dirs, args.skip_data_prep)
-    analysis_results = run_summarization_classification(None, dirs, args.skip_analysis, limit=3000)
+    analysis_results = run_summarization_classification(None, dirs, args.skip_analysis, limit=LIMIT)
     visualization_paths = run_visualization(df, analysis_results, dirs, args.skip_visualization)
     story_results = run_story_development(df, analysis_results, dirs, args.skip_stories)
     # Generate a final report

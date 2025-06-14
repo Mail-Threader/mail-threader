@@ -213,8 +213,6 @@ class SummarizationClassification:
         labels = model.fit_predict(tfidf_matrix)
         return model, labels
 
-
-
     def extract_entities(self, df: pd.DataFrame, text_column: str = "body", chunk_size=500_000) -> pd.DataFrame:
         """
         Extract named entities (PERSON, ORG, GPE) from a text column using threading + chunking.
@@ -265,14 +263,26 @@ class SummarizationClassification:
         df['sentiment'] = sentiments
         return df
 
-    def summarize_corpus(self, df: pd.DataFrame, text_column: str = "body", max_sentences: int = 5, max_input_sentences: int = 1000) -> str:
+    def summarize_corpus1(self, df: pd.DataFrame, text_column: str = "body", max_sentences: int = 5, max_input_sentences: int = 1000, num_emails: int = None) -> str:
         """
         Generates an extractive summary from the full corpus using TF-IDF and cosine similarity.
         Trims text to avoid exceeding spaCy/max input memory limits..
         """
 
+        df = df.copy()
+
+        if num_emails is not None:
+            try:
+                df = df.head(num_emails)
+            except Exception as e:
+                logger.error(f"[Error trimming DataFrame]: {e}")
+                return ""
+
+        # Confirm the number of rows used
+        logger.info(f"Summarizing {len(df)} emails.")
+
         full_text = " ".join(df[text_column].dropna())
-        full_text = full_text[:1_000_000] # salfly limit the length to avoid spaCy issues
+        #full_text = full_text[:1_000_000]
         sentences = sent_tokenize(full_text)
 
         if len(sentences) > max_input_sentences:
@@ -290,27 +300,54 @@ class SummarizationClassification:
         summary = " ".join([sentences[i] for i in top_indices])
         return summary
 
+    def summarize_corpus(
+        self,
+        df: pd.DataFrame,
+        num_emails: int = None,
+        summary_length: int = 5,
+        return_dataframe: bool = False
+    ) -> str | pd.DataFrame:
+        if num_emails is not None:
+            df = df.head(num_emails)
+
+        full_text = " ".join(df["body"].fillna(""))
+
+        sentences = sent_tokenize(full_text)
+
+        # Create TF-IDF matrix
+        vectorizer = TfidfVectorizer()
+        tfidf_matrix = vectorizer.fit_transform(sentences)
+        sentence_scores = tfidf_matrix.sum(axis=1).A1  # .A1 flattens to 1D array
+
+        # Rank sentences by score
+        ranked_sentences = sorted(
+            zip(sentences, sentence_scores), key=lambda x: x[1], reverse=True
+        )
+
+        top_sentences = [sentence for sentence, _ in ranked_sentences[:summary_length]]
+        summary = " ".join(top_sentences)
+
+        if return_dataframe:
+            summary_df = pd.DataFrame({
+                "body": df["body"].fillna("").tolist()
+            })
+
+            summary_df["selected_sentences"] = summary_df["body"].apply(
+                lambda text: " ".join([s for s in sent_tokenize(text) if s in top_sentences])
+            )
+
+            return summary_df
+
+        return summary
+
 
     def save_to_json(self, df, filename):
         output_path = os.path.join(self.output_dir, filename)
         df.to_json(output_path, orient="records", indent=4)
 
-    def save_to_sqlite(self, df, db_filename="summarization_results.db", table_name="emails"):
-        db_path = os.path.join(self.output_dir, db_filename)
-
-
-        # Convert list columns (like persons/orgs/locations) to comma-separated strings
-        df = df.copy()
-        for col in df.columns:
-            if df[col].apply(lambda x: isinstance(x, list)).any():
-                df[col] = df[col].apply(lambda x: ", ".join(map(str, x)) if isinstance(x, list) else x)
-
-        conn = sqlite3.connect(db_path)
-        df.to_sql(table_name, conn, if_exists="replace", index=False)
-        conn.close()
 
 # Main block for independant execution
-if __name__ == "__main__":
+""" if __name__ == "__main__":
     # Create SummarizationClassification instance
     analyzer = SummarizationClassification()
 
@@ -329,4 +366,4 @@ if __name__ == "__main__":
     summary = analyzer.summarize_corpus(df)
     print("Corpus Summary:\n", summary)
     analyzer.save_to_csv(df, "email_analysis_results.csv")
-    print("Done!")
+    print("Done!") """
