@@ -3,9 +3,11 @@ Utility functions for the Enron Email Analysis Pipeline.
 """
 
 import os
+import re
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import nltk
+import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
 from loguru import logger
@@ -287,3 +289,171 @@ def load_processed_df(search_dir: str, search_file_name: str, db_table: str = No
             logger.error(f"Error loading data from database: {e}")
 
     return pd.DataFrame()
+
+
+def calculate_influence_score(metrics: Dict[str, float]) -> float:
+    """
+    Calculate influence score from actor metrics.
+
+    Args:
+        metrics (Dict[str, float]): Dictionary containing actor metrics
+
+    Returns:
+        float: Calculated influence score
+    """
+    try:
+        degree_centrality = metrics.get("degree_centrality", 0)
+        betweenness_centrality = metrics.get("betweenness_centrality", 0)
+        pagerank = metrics.get("pagerank", 0)
+        return (degree_centrality + betweenness_centrality + pagerank) / 3
+    except Exception as e:
+        logger.error(f"Error calculating influence score: {e}")
+        return 0.0
+
+
+def calculate_communication_patterns(emails: pd.DataFrame) -> Dict[str, Any]:
+    """
+    Calculate communication patterns from email data.
+
+    Args:
+        emails (pd.DataFrame): DataFrame containing email data
+
+    Returns:
+        Dict[str, Any]: Dictionary containing communication patterns
+    """
+    try:
+        daily_patterns = emails.groupby(emails["date"].dt.day_name()).size()
+        busiest_day = daily_patterns.idxmax()
+        busiest_day_count = int(daily_patterns.max())
+
+        response_times = []
+        for _, email in emails.iterrows():
+            if pd.notna(email["date"]):
+                replies = emails[
+                    (emails["subject"].str.contains(email["subject"], na=False))
+                    & (emails["date"] > email["date"])
+                ]
+                if not replies.empty:
+                    response_time = (replies["date"].min() - email["date"]).total_seconds() / 3600
+                    response_times.append(response_time)
+
+        avg_response_time = np.mean(response_times) if response_times else None
+
+        return {
+            "busiest_day": busiest_day,
+            "busiest_day_count": busiest_day_count,
+            "avg_response_time": f"{avg_response_time:.1f} hours" if avg_response_time else "N/A",
+        }
+    except Exception as e:
+        logger.error(f"Error calculating communication patterns: {e}")
+        return {}
+
+
+def calculate_event_metrics(event_emails: pd.DataFrame) -> Dict[str, Any]:
+    """
+    Calculate metrics for significant events.
+
+    Args:
+        event_emails (pd.DataFrame): DataFrame containing event emails
+
+    Returns:
+        Dict[str, Any]: Dictionary containing event metrics
+    """
+    try:
+        participants = set()
+        for _, email in event_emails.iterrows():
+            if pd.notna(email["from"]):
+                participants.update(re.findall(r"[\w\.-]+@[\w\.-]+", email["from"]))
+            if pd.notna(email["to"]):
+                participants.update(re.findall(r"[\w\.-]+@[\w\.-]+", email["to"]))
+
+        return {
+            "participant_count": len(participants),
+            "avg_email_length": float(event_emails["body"].str.len().mean()),
+            "reply_rate": float(
+                len(event_emails[event_emails["subject"].str.contains("Re:", na=False)])
+                / len(event_emails)
+            ),
+        }
+    except Exception as e:
+        logger.error(f"Error calculating event metrics: {e}")
+        return {}
+
+
+def calculate_thread_metrics(thread: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Calculate metrics for email threads.
+
+    Args:
+        thread (List[Dict[str, Any]]): List of emails in thread
+
+    Returns:
+        Dict[str, Any]: Dictionary containing thread metrics
+    """
+    try:
+        participants = set()
+        for email in thread:
+            if "from" in email and email["from"]:
+                sender_emails = re.findall(r"[\w\.-]+@[\w\.-]+", email["from"])
+                participants.update(sender_emails)
+
+        thread_duration = None
+        if thread[0]["date"] and thread[-1]["date"]:
+            thread_duration = (thread[-1]["date"] - thread[0]["date"]).total_seconds() / 3600
+
+        response_times = []
+        for i in range(len(thread) - 1):
+            if thread[i]["date"] and thread[i + 1]["date"]:
+                response_time = (thread[i + 1]["date"] - thread[i]["date"]).total_seconds() / 3600
+                response_times.append(response_time)
+
+        avg_response_time = np.mean(response_times) if response_times else None
+
+        return {
+            "duration_hours": f"{thread_duration:.1f}" if thread_duration else "N/A",
+            "avg_response_time": f"{avg_response_time:.1f} hours" if avg_response_time else "N/A",
+            "participant_count": len(participants),
+        }
+    except Exception as e:
+        logger.error(f"Error calculating thread metrics: {e}")
+        return {}
+
+
+def analyze_topic_trend(topic_counts: Dict[str, Dict[int, int]], topic_num: int) -> Dict[str, Any]:
+    """
+    Analyze the trend of a topic over time.
+
+    Args:
+        topic_counts (Dict[str, Dict[int, int]]): Dictionary containing topic counts over time
+        topic_num (int): Topic number to analyze
+
+    Returns:
+        Dict[str, Any]: Dictionary containing trend analysis
+    """
+    try:
+        if not topic_counts:
+            return {"trend": "unknown", "peak_period": None, "peak_count": 0}
+
+        topic_data = {period: counts.get(topic_num, 0) for period, counts in topic_counts.items()}
+
+        if not topic_data:
+            return {"trend": "unknown", "peak_period": None, "peak_count": 0}
+
+        peak_period = max(topic_data.items(), key=lambda x: x[1])
+
+        values = list(topic_data.values())
+        if len(values) < 2:
+            trend = "stable"
+        else:
+            slope = np.polyfit(range(len(values)), values, 1)[0]
+            if slope > 0.1:
+                trend = "increasing"
+            elif slope < -0.1:
+                trend = "decreasing"
+            else:
+                trend = "stable"
+
+        return {"trend": trend, "peak_period": peak_period[0], "peak_count": peak_period[1]}
+    except Exception as e:
+        logger.error(f"Error analyzing topic trend: {e}")
+        return {"trend": "unknown", "peak_period": None, "peak_count": 0}

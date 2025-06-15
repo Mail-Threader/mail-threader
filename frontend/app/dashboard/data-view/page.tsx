@@ -1,7 +1,16 @@
 import { Table as ProcessedEmailsTable } from '@/components/ui/data-table/processed-emails-table';
-import { getProcessedEmails } from '@/lib/queries';
+import { getProcessedEmailsAction } from '@/actions/data';
 
-export default function DataViewPage() {
+export default async function DataViewPage() {
+	const initialData = await getProcessedEmailsAction({
+		page: 1,
+		perPage: 10,
+		sort: [{ id: 'date', desc: true }],
+		filters: [],
+		joinOperator: 'and',
+		filterFlag: 'advancedFilters',
+		subject: '',
+	});
 	return (
 		<main className="px-8 py-4">
 			<h3 className="text-3xl">Cleaned & processed Data</h3>
@@ -9,19 +18,7 @@ export default function DataViewPage() {
 				View and explore the data processed during the preparation stage
 				of the email dataset.
 			</p>
-			<ProcessedEmailsTable
-				promises={Promise.all([
-					getProcessedEmails({
-						page: 1,
-						perPage: 10,
-						sort: [],
-						filters: [],
-						joinOperator: 'and',
-						filterFlag: 'advancedFilters',
-						subject: '',
-					})
-				])}
-			/>
+			<ProcessedEmailsTable initialData={initialData} />
 			{/* <Card>
 				<CardHeader>
 					<CardTitle>Data Overview</CardTitle>

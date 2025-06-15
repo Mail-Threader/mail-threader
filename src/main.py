@@ -122,8 +122,8 @@ def run_data_preparation(dirs, skip=False):
 
     logger.info("Running data preparation step...")
     df = data_prep.process_all_emails()
-    data_prep.save_to_pickle(df)
-    data_prep.save_to_json(df)
+    # data_prep.save_to_pickle(df)
+    # data_prep.save_to_json(df)
     logger.info(f"Processed {len(df)} emails")
     return df
 

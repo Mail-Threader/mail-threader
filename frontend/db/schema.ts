@@ -77,7 +77,6 @@ export const processedEmails = pgTable('processed_emails', {
 });
 
 export type ProcessedEmail = typeof processedEmails.$inferSelect;
-export type NewProcessedEmail = typeof processedEmails.$inferInsert;
 
 export const summarizedEmails = pgTable('summarized_emails', {
 	messageId: text('message_id'),
@@ -108,7 +107,6 @@ export const summarizedEmails = pgTable('summarized_emails', {
 });
 
 export type SummarizedEmail = typeof summarizedEmails.$inferSelect;
-export type NewSummarizedEmail = typeof summarizedEmails.$inferInsert;
 
 export const visualizationData = pgTable('visualization_data', {
 	fileType: text('file_type'),
@@ -116,28 +114,41 @@ export const visualizationData = pgTable('visualization_data', {
 });
 
 export type VisualizationData = typeof visualizationData.$inferSelect;
-export type NewVisualizationData = typeof visualizationData.$inferInsert;
 
 export const stories = pgTable('stories', {
 	title: text(),
 	type: text(),
 	actor: text(),
-	metrics: text(),
-	commonTopics: text('common_topics'),
-	sampleSubjects: text('sample_subjects'),
+	metrics: json('metrics'),
+	commonTopics: json('common_topics'),
+	sampleSubjects: json('sample_subjects'),
 	summary: text(),
 	date: date(),
 	emailCount: doublePrecision('email_count'),
-	commonWords: text('common_words'),
+	commonWords: json('common_words'),
 	subject: text(),
 	numEmails: doublePrecision('num_emails'),
-	participants: text(),
+	participants: json('participants'),
 	startDate: timestamp('start_date', { mode: 'string' }),
 	endDate: timestamp('end_date', { mode: 'string' }),
 	topicId: text('topic_id'),
-	keywords: text(),
+	keywords: json('keywords'),
 	timestamp: text(),
+	communicationPatterns: json('communication_patterns'),
+	eventMetrics: json('event_metrics'),
+	threadMetrics: json('thread_metrics'),
+	topicMetrics: json('topic_metrics'),
+	relatedEmails: json('related_emails'),
+	influenceScore: doublePrecision('influence_score'),
+	deviation: doublePrecision('deviation'),
+	participantCount: integer('participant_count'),
+	avgEmailLength: doublePrecision('avg_email_length'),
+	replyRate: doublePrecision('reply_rate'),
+	durationHours: doublePrecision('duration_hours'),
+	avgResponseTime: doublePrecision('avg_response_time'),
+	trend: text(),
+	peakPeriod: text('peak_period'),
+	peakCount: integer('peak_count'),
 });
 
 export type Story = typeof stories.$inferSelect;
-export type NewStory = typeof stories.$inferInsert;

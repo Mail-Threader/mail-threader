@@ -1158,12 +1158,7 @@ class StoryDevelopment:
                 If None, it will use min(32, os.cpu_count() + 4)
 
         Returns:
-            dict: Dictionary containing comprehensive story development results
-
-        Raises:
-            StoryGenerationError: If story generation fails
-            DataLoadingError: If data cannot be loaded
-            AnalysisError: If analysis fails
+            list: List of story summaries for HTML report
         """
         try:
             logger.info("Starting story development process...")
@@ -1190,93 +1185,28 @@ class StoryDevelopment:
 
             logger.info(f"Developing comprehensive stories from {len(df)} emails")
 
-            # Set up parallel processing
-            if max_workers is None:
-                max_workers = min(32, os.cpu_count() + 4)
-            logger.info(f"Using {max_workers} worker threads for parallel processing")
+            # Generate story components
+            key_actors = self.identify_key_actors(df)
+            topic_evolution = self.track_topics_over_time(df, analysis_results)
+            significant_events = self.detect_significant_events(df)
+            email_threads = self.construct_email_threads(df)
 
-            # Generate comprehensive story with parallel processing
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                # Submit tasks for parallel execution
-                future_to_task = {
-                    executor.submit(self.identify_key_actors, df): "key_actors",
-                    executor.submit(
-                        self.track_topics_over_time, df, analysis_results
-                    ): "topic_evolution",
-                    executor.submit(self.detect_significant_events, df): "significant_events",
-                    executor.submit(self.construct_email_threads, df): "email_threads",
-                    executor.submit(
-                        self.analyze_email_connections, df, analysis_results
-                    ): "email_connections",
-                }
+            # Generate story summaries for HTML report
+            stories = self.generate_story_summaries(
+                df,
+                analysis_results,
+                key_actors,
+                topic_evolution,
+                significant_events,
+                email_threads,
+            )
 
-                # Initialize results dictionary
-                results = {}
+            # Save stories
+            logger.info("Saving stories...")
+            stories_path = self.save_stories(stories)
 
-                # Process completed tasks with progress bar
-                with tqdm(total=len(future_to_task), desc="Generating story components") as pbar:
-                    for future in as_completed(future_to_task):
-                        task_name = future_to_task[future]
-                        try:
-                            results[task_name] = future.result()
-                            if results[task_name] is None:
-                                raise AnalysisError(f"Task {task_name} returned None")
-                            logger.info(f"Completed {task_name} analysis")
-                        except Exception as e:
-                            logger.error(f"Error in {task_name} analysis: {e}")
-                            raise AnalysisError(f"Failed to complete {task_name} analysis: {e}")
-                        pbar.update(1)
-
-            # Generate a comprehensive story
-            try:
-                logger.info("Formatting story components...")
-                story = {
-                    "metadata": {
-                        "generation_date": datetime.now().isoformat(),
-                        "total_emails": len(df),
-                        "time_span": {
-                            "start": df["date"].min().isoformat(),
-                            "end": df["date"].max().isoformat(),
-                        },
-                    },
-                    "key_actors": self._format_key_actors_story(results["key_actors"]),
-                    "topic_evolution": self._format_topic_evolution_story(
-                        results["topic_evolution"]
-                    ),
-                    "significant_events": self._format_events_story(results["significant_events"]),
-                    "email_threads": self._format_threads_story(results["email_threads"]),
-                    "email_connections": self._format_connections_story(
-                        results["email_connections"]
-                    ),
-                    "narrative_summary": self._generate_narrative_summary(
-                        results["key_actors"],
-                        results["topic_evolution"],
-                        results["significant_events"],
-                        results["email_threads"],
-                    ),
-                }
-
-                # Add enhanced summaries and visualization insights in parallel
-                with ThreadPoolExecutor(max_workers=2) as executor:
-                    future_summaries = executor.submit(
-                        self._generate_enhanced_summaries, df, analysis_results
-                    )
-                    future_insights = executor.submit(
-                        self._generate_visualization_insights, analysis_results
-                    )
-
-                    story["enhanced_summaries"] = future_summaries.result()
-                    story["visualization_insights"] = future_insights.result()
-
-                # Save story
-                logger.info("Saving stories...")
-                stories_path = self.save_stories([story])
-
-                logger.info("Story development completed successfully!")
-
-                return {"story": story, "stories_path": stories_path}
-            except Exception as e:
-                raise StoryGenerationError(f"Failed to generate story: {e}")
+            logger.info("Story development completed successfully!")
+            return stories
 
         except Exception as e:
             if isinstance(e, (DataLoadingError, AnalysisError, StoryGenerationError)):
@@ -1347,235 +1277,872 @@ class StoryDevelopment:
                 except Exception as e:
                     raise DatabaseError(f"Failed to save stories to database: {e}")
 
-            return json_path
+            return html_path  # Return the HTML path instead of JSON path
         except Exception as e:
             if isinstance(e, (FileOperationError, DatabaseError)):
                 raise
             raise FileOperationError(f"Unexpected error saving stories: {e}")
 
-    @staticmethod
-    def _generate_html_report(stories):
+    def _generate_html_report(self, stories):
+        """Generate a simple HTML report from the stories."""
+        html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Email Analysis Stories</title>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    line-height: 1.6;
+                    margin: 20px;
+                    max-width: 1200px;
+                    margin: 0 auto;
+                    padding: 20px;
+                }
+                .story {
+                    margin-bottom: 30px;
+                    padding: 15px;
+                    border: 1px solid #ddd;
+                    border-radius: 5px;
+                }
+                .story-title {
+                    font-size: 1.2em;
+                    font-weight: bold;
+                    margin-bottom: 10px;
+                    color: #333;
+                }
+                .story-content {
+                    margin-bottom: 10px;
+                }
+                .story-metrics {
+                    background-color: #f5f5f5;
+                    padding: 10px;
+                    border-radius: 3px;
+                    margin-top: 10px;
+                }
+                .metric {
+                    margin: 5px 0;
+                }
+                .search-box {
+                    width: 100%;
+                    padding: 8px;
+                    margin-bottom: 20px;
+                    border: 1px solid #ddd;
+                    border-radius: 4px;
+                }
+                .filter-buttons {
+                    margin-bottom: 20px;
+                }
+                .filter-button {
+                    padding: 5px 10px;
+                    margin-right: 5px;
+                    border: 1px solid #ddd;
+                    background: #f5f5f5;
+                    cursor: pointer;
+                }
+                .filter-button.active {
+                    background: #007bff;
+                    color: white;
+                }
+                .related-emails {
+                    margin-top: 15px;
+                    border-top: 1px solid #ddd;
+                    padding-top: 15px;
+                }
+                .email-item {
+                    margin-bottom: 15px;
+                    padding: 10px;
+                    background: #f9f9f9;
+                    border-radius: 4px;
+                }
+                .email-header {
+                    font-weight: bold;
+                    margin-bottom: 5px;
+                }
+                .email-preview {
+                    font-size: 0.9em;
+                    color: #666;
+                }
+                .email-meta {
+                    font-size: 0.8em;
+                    color: #888;
+                    margin-top: 5px;
+                }
+                .email-keyword {
+                    display: inline-block;
+                    background: #e9ecef;
+                    padding: 2px 6px;
+                    border-radius: 3px;
+                    margin-right: 5px;
+                    font-size: 0.8em;
+                }
+            </style>
+        </head>
+        <body>
+            <h1>Email Analysis Stories</h1>
+            <input type="text" class="search-box" id="searchBox" placeholder="Search stories...">
+            <div class="filter-buttons">
+                <button class="filter-button active" data-filter="all">All</button>
+                <button class="filter-button" data-filter="key_actor">Key Actors</button>
+                <button class="filter-button" data-filter="significant_event">Events</button>
+                <button class="filter-button" data-filter="email_thread">Threads</button>
+                <button class="filter-button" data-filter="topic_evolution">Topics</button>
+            </div>
+            <div id="stories">
         """
-        Generate an HTML report from the stories.
+
+        for story in stories:
+            story_type = story.get("type", "")
+            story_html = f"""
+            <div class="story" data-type="{story_type}">
+                <div class="story-title">{story.get('title', 'Untitled Story')}</div>
+                <div class="story-content">{story.get('summary', '')}</div>
+            """
+
+            # Add metrics based on story type
+            if story_type == "key_actor":
+                metrics = story.get("metrics", {})
+                story_html += f"""
+                <div class="story-metrics">
+                    <div class="metric">Emails Sent: {metrics.get('sent', 0)}</div>
+                    <div class="metric">Emails Received: {metrics.get('received', 0)}</div>
+                    <div class="metric">Busiest Day: {story.get('communication_patterns', {}).get('busiest_day', 'N/A')}</div>
+                    <div class="metric">Average Response Time: {story.get('communication_patterns', {}).get('avg_response_time', 'N/A')}</div>
+                </div>
+                """
+            elif story_type == "significant_event":
+                metrics = story.get("event_metrics", {})
+                story_html += f"""
+                <div class="story-metrics">
+                    <div class="metric">Email Count: {story.get('email_count', 0)}</div>
+                    <div class="metric">Participants: {metrics.get('participant_count', 0)}</div>
+                    <div class="metric">Average Email Length: {metrics.get('avg_email_length', 0):.0f} characters</div>
+                    <div class="metric">Reply Rate: {metrics.get('reply_rate', 0):.1%}</div>
+                </div>
+                """
+            elif story_type == "email_thread":
+                metrics = story.get("thread_metrics", {})
+                story_html += f"""
+                <div class="story-metrics">
+                    <div class="metric">Number of Emails: {story.get('num_emails', 0)}</div>
+                    <div class="metric">Participants: {metrics.get('participant_count', 0)}</div>
+                    <div class="metric">Duration: {metrics.get('duration_hours', 'N/A')} hours</div>
+                    <div class="metric">Average Response Time: {metrics.get('avg_response_time', 'N/A')}</div>
+                </div>
+                """
+            elif story_type == "topic_evolution":
+                metrics = story.get("topic_metrics", {})
+                story_html += f"""
+                <div class="story-metrics">
+                    <div class="metric">Trend: {metrics.get('trend', 'Unknown')}</div>
+                    <div class="metric">Peak Period: {metrics.get('peak_period', 'N/A')}</div>
+                    <div class="metric">Peak Count: {metrics.get('peak_count', 0)}</div>
+                </div>
+                """
+
+            # Add related emails section
+            if "related_emails" in story and story["related_emails"]:
+                story_html += """
+                <div class="related-emails">
+                    <h3>Related Emails</h3>
+                """
+                for email in story["related_emails"]:
+                    story_html += f"""
+                    <div class="email-item">
+                        <div class="email-header">{email.get('subject', 'No Subject')}</div>
+                        <div class="email-preview">{email.get('body_preview', '')}</div>
+                        <div class="email-meta">
+                            From: {email.get('from', 'Unknown')}<br>
+                            To: {email.get('to', 'Unknown')}<br>
+                            Date: {email.get('date', 'Unknown')}
+                    """
+                    if "matching_keyword" in email:
+                        story_html += f"""
+                            <br>Matching Keyword: <span class="email-keyword">{email['matching_keyword']}</span>
+                        """
+                    story_html += """
+                        </div>
+                    </div>
+                    """
+                story_html += "</div>"
+
+            story_html += "</div>"
+            html += story_html
+
+        html += """
+            </div>
+            <script>
+                document.addEventListener('DOMContentLoaded', function() {
+                    const searchBox = document.getElementById('searchBox');
+                    const filterButtons = document.querySelectorAll('.filter-button');
+                    const stories = document.querySelectorAll('.story');
+
+                    // Search functionality
+                    searchBox.addEventListener('input', function(e) {
+                        const searchTerm = e.target.value.toLowerCase();
+                        stories.forEach(story => {
+                            const text = story.textContent.toLowerCase();
+                            story.style.display = text.includes(searchTerm) ? 'block' : 'none';
+                        });
+                    });
+
+                    // Filter functionality
+                    filterButtons.forEach(button => {
+                        button.addEventListener('click', function() {
+                            const filter = this.dataset.filter;
+
+                            // Update active button
+                            filterButtons.forEach(btn => btn.classList.remove('active'));
+                            this.classList.add('active');
+
+                            // Show/hide stories based on filter
+                            stories.forEach(story => {
+                                if (filter === 'all' || story.dataset.type === filter) {
+                                    story.style.display = 'block';
+                                } else {
+                                    story.style.display = 'none';
+                                }
+                            });
+                        });
+                    });
+                });
+            </script>
+        </body>
+        </html>
+        """
+
+        return html
+
+    def generate_story_summaries(
+        self,
+        df,
+        analysis_results,
+        key_actors,
+        topic_evolution,
+        significant_events,
+        email_threads,
+    ):
+        """
+        Generate comprehensive story summaries based on all available data.
 
         Args:
-            stories (list): List of story summaries
+            df (pandas.DataFrame): DataFrame containing email data
+            analysis_results (dict): Dictionary containing analysis results
+            key_actors (dict): Dictionary containing key actors data
+            topic_evolution (dict): Dictionary containing topic evolution data
+            significant_events (list): List of significant events
+            email_threads (dict): Dictionary of email threads
 
         Returns:
-            str: HTML content
-
-        Raises:
-            FileOperationError: If HTML generation fails
+            list: List of story summaries
         """
-        try:
-            html = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Enron Email Stories</title>
-                <style>
-                    body {{ font-family: Arial, sans-serif; margin: 20px; }}
-                    h1 {{color: #2c3e50; }}
-                    h2 {{ color: #3498db; margin-top: 30px; }}
-                    .story {{ border: 1px solid #ddd; padding: 15px; margin-bottom: 20px; border-radius: 5px; }}
-                    .story-title {{ font-size: 1.2em; font-weight: bold; margin-bottom: 10px; }}
-                    .story-summary {{ margin-bottom: 15px; }}
-                    .story-details {{ font-size: 0.9em; color: #555; }}
-                    .key-actor {{ background-color: #e8f4f8; }}
-                    .significant-event {{ background-color: #f8f4e8; }}
-                    .email-thread {{ background-color: #f4f8e8; }}
-                    .topic-evolution {{ background-color: #f8e8f4; }}
-                    .metadata {{ background-color: #f5f5f5; padding: 10px; border-radius: 5px; margin-bottom: 20px; }}
-                    .section {{ margin-bottom: 30px; }}
-                    .list-item {{ margin: 5px 0; }}
-                    .highlight {{ background-color: #fff3cd; padding: 2px 5px; border-radius: 3px; }}
-                </style>
-            </head>
-            <body>
-                <h1>Enron Email Stories</h1>
-                <p>Generated on {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
-            """
+        logger.info("Generating story summaries")
+        stories = []
 
-            if not stories:
-                logger.warning("No stories provided for HTML report generation")
-                return html + "</body></html>"
+        # 1. Stories based on key actors
+        if key_actors and "top_actors" in key_actors:
+            for actor, metrics in list(key_actors["top_actors"].items())[:5]:
+                # Get emails sent by this actor
+                actor_emails = df[df["from"].str.contains(actor, na=False)]
 
-            for story in stories:
-                try:
-                    # Add metadata section
-                    if "metadata" in story:
-                        html += """
-                        <div class="metadata">
-                            <h2>Metadata</h2>
-                            <p>Total Emails: {}</p>
-                            <p>Time Span: {} to {}</p>
-                        </div>
-                        """.format(
-                            story["metadata"].get("total_emails", "N/A"),
-                            story["metadata"].get("time_span", {}).get("start", "N/A"),
-                            story["metadata"].get("time_span", {}).get("end", "N/A"),
+                if len(actor_emails) > 0:
+                    # Get related emails (emails in threads where actor participated)
+                    related_emails = []
+                    for _, email in actor_emails.iterrows():
+                        thread_emails = df[df["subject"].str.contains(email["subject"], na=False)]
+                        for _, thread_email in thread_emails.iterrows():
+                            related_emails.append(
+                                {
+                                    "subject": thread_email["subject"],
+                                    "date": thread_email["date"],
+                                    "from": thread_email["from"],
+                                    "to": thread_email["to"],
+                                    "body_preview": thread_email["body"][:200] + "..."
+                                    if len(thread_email["body"]) > 200
+                                    else thread_email["body"],
+                                }
+                            )
+
+                    # Use clean_body column if available, otherwise use body
+                    text_column = "clean_body" if "clean_body" in actor_emails.columns else "body"
+                    all_text = " ".join(actor_emails[text_column].fillna(""))
+                    words = re.findall(r"\b\w+\b", all_text.lower())
+                    words = [
+                        word for word in words if word not in self.stop_words and len(word) > 2
+                    ]
+                    common_words = Counter(words).most_common(20)
+                    sample_subjects = actor_emails["subject"].head(5).tolist()
+
+                    # Calculate communication patterns
+                    daily_patterns = actor_emails.groupby(actor_emails["date"].dt.day_name()).size()
+                    busiest_day = daily_patterns.idxmax()
+                    busiest_day_count = daily_patterns.max()
+
+                    # Calculate average response time
+                    response_times = []
+                    for _, email in actor_emails.iterrows():
+                        if pd.notna(email["date"]):
+                            replies = df[
+                                (df["subject"].str.contains(email["subject"], na=False))
+                                & (df["date"] > email["date"])
+                            ]
+                            if not replies.empty:
+                                response_time = (
+                                    replies["date"].min() - email["date"]
+                                ).total_seconds() / 3600
+                                response_times.append(response_time)
+
+                    avg_response_time = np.mean(response_times) if response_times else None
+
+                    story = {
+                        "title": f"The Story of {actor}",
+                        "type": "key_actor",
+                        "actor": actor,
+                        "metrics": metrics,
+                        "common_topics": common_words,
+                        "sample_subjects": sample_subjects,
+                        "communication_patterns": {
+                            "busiest_day": busiest_day,
+                            "busiest_day_count": int(busiest_day_count),
+                            "avg_response_time": f"{avg_response_time:.1f} hours"
+                            if avg_response_time
+                            else "N/A",
+                        },
+                        "related_emails": related_emails,
+                        "summary": self._generate_actor_summary(
+                            actor,
+                            metrics,
+                            common_words,
+                            busiest_day,
+                            busiest_day_count,
+                            avg_response_time,
+                        ),
+                    }
+                    stories.append(story)
+
+        # 2. Stories based on significant events
+        for event in significant_events[:5]:
+            event_date = event["date"]
+            event_emails = df[
+                (pd.to_datetime(df["date"].dt.date) >= pd.to_datetime(event_date))
+                & (
+                    pd.to_datetime(df["date"].dt.date)
+                    < pd.to_datetime(event_date) + timedelta(days=1)
+                )
+            ]
+
+            # Get all related emails (including replies and forwards)
+            related_emails = []
+            for _, email in event_emails.iterrows():
+                # Get emails in the same thread
+                thread_emails = df[df["subject"].str.contains(email["subject"], na=False)]
+                for _, thread_email in thread_emails.iterrows():
+                    related_emails.append(
+                        {
+                            "subject": thread_email["subject"],
+                            "date": thread_email["date"],
+                            "from": thread_email["from"],
+                            "to": thread_email["to"],
+                            "body_preview": thread_email["body"][:200] + "..."
+                            if len(thread_email["body"]) > 200
+                            else thread_email["body"],
+                        }
+                    )
+
+            # Analyze event participants
+            participants = set()
+            for _, email in event_emails.iterrows():
+                if pd.notna(email["from"]):
+                    participants.update(re.findall(r"[\w\.-]+@[\w\.-]+", email["from"]))
+                if pd.notna(email["to"]):
+                    participants.update(re.findall(r"[\w\.-]+@[\w\.-]+", email["to"]))
+
+            # Calculate event metrics
+            event_metrics = {
+                "participant_count": len(participants),
+                "avg_email_length": event_emails["body"].str.len().mean(),
+                "reply_rate": len(
+                    event_emails[event_emails["subject"].str.contains("Re:", na=False)]
+                )
+                / len(event_emails),
+            }
+
+            story = {
+                "title": f"Significant Event on {event_date}",
+                "type": "significant_event",
+                "date": event_date,
+                "email_count": event["email_count"],
+                "common_words": event["common_words"],
+                "sample_subjects": event["sample_subjects"],
+                "event_metrics": event_metrics,
+                "participants": list(participants),
+                "related_emails": related_emails,
+                "summary": self._generate_event_summary(
+                    event_date,
+                    event["email_count"],
+                    event["deviation"],
+                    event["common_words"],
+                    event_metrics,
+                ),
+            }
+            stories.append(story)
+
+        # 3. Stories based on email threads
+        for subject, thread in list(email_threads.items())[:5]:
+            if len(thread) >= 3:
+                # Extract participants
+                participants = set()
+                for email in thread:
+                    if "from" in email and email["from"]:
+                        sender_emails = re.findall(r"[\w\.-]+@[\w\.-]+", email["from"])
+                        participants.update(sender_emails)
+
+                # Get all related emails
+                related_emails = []
+                for email in thread:
+                    related_emails.append(
+                        {
+                            "subject": email.get("subject", subject),
+                            "date": email.get("date"),
+                            "from": email.get("from"),
+                            "to": email.get("to"),
+                            "body_preview": email.get("body", "")[:200] + "..."
+                            if len(email.get("body", "")) > 200
+                            else email.get("body", ""),
+                        }
+                    )
+
+                # Calculate thread metrics
+                thread_duration = None
+                if thread[0]["date"] and thread[-1]["date"]:
+                    thread_duration = (
+                        thread[-1]["date"] - thread[0]["date"]
+                    ).total_seconds() / 3600
+
+                avg_response_time = None
+                response_times = []
+                for i in range(len(thread) - 1):
+                    if thread[i]["date"] and thread[i + 1]["date"]:
+                        response_time = (
+                            thread[i + 1]["date"] - thread[i]["date"]
+                        ).total_seconds() / 3600
+                        response_times.append(response_time)
+                if response_times:
+                    avg_response_time = np.mean(response_times)
+
+                story = {
+                    "title": f"Email Thread: {subject}",
+                    "type": "email_thread",
+                    "subject": subject,
+                    "num_emails": len(thread),
+                    "participants": list(participants),
+                    "start_date": thread[0]["date"] if "date" in thread[0] else None,
+                    "end_date": thread[-1]["date"] if "date" in thread[-1] else None,
+                    "thread_metrics": {
+                        "duration_hours": f"{thread_duration:.1f}" if thread_duration else "N/A",
+                        "avg_response_time": f"{avg_response_time:.1f} hours"
+                        if avg_response_time
+                        else "N/A",
+                        "participant_count": len(participants),
+                    },
+                    "related_emails": related_emails,
+                    "summary": self._generate_thread_summary(
+                        subject,
+                        len(thread),
+                        len(participants),
+                        thread[0]["date"] if "date" in thread[0] else None,
+                        thread[-1]["date"] if "date" in thread[-1] else None,
+                        thread_duration,
+                        avg_response_time,
+                    ),
+                }
+                stories.append(story)
+
+        # 4. Stories based on topic evolution
+        if topic_evolution and "topic_keywords" in topic_evolution:
+            for topic_id, keywords in list(topic_evolution["topic_keywords"].items())[:5]:
+                # Get emails related to this topic
+                topic_emails = []
+                for keyword in keywords[:5]:  # Use top 5 keywords
+                    keyword_emails = df[df["body"].str.contains(keyword, case=False, na=False)]
+                    for _, email in keyword_emails.iterrows():
+                        topic_emails.append(
+                            {
+                                "subject": email["subject"],
+                                "date": email["date"],
+                                "from": email["from"],
+                                "to": email["to"],
+                                "body_preview": email["body"][:200] + "..."
+                                if len(email["body"]) > 200
+                                else email["body"],
+                                "matching_keyword": keyword,
+                            }
                         )
 
-                    # Add key actors section
-                    if "key_actors" in story and story["key_actors"]:
-                        html += """
-                        <div class="section">
-                            <h2>Key Actors</h2>
-                        """
-                        for actor in story["key_actors"].get("main_characters", []):
-                            try:
-                                html += """
-                                <div class="story key-actor">
-                                    <div class="story-title">{}</div>
-                                    <div class="story-details">
-                                        <p>Role: {}</p>
-                                        <p>Influence Score: {:.2f}</p>
-                                        <p>Metrics:</p>
-                                        <ul>
-                                            <li>Emails Sent: {}</li>
-                                            <li>Emails Received: {}</li>
-                                            <li>Degree Centrality: {:.2f}</li>
-                                            <li>Betweenness Centrality: {:.2f}</li>
-                                            <li>PageRank: {:.2f}</li>
-                                        </ul>
-                                    </div>
-                                </div>
-                                """.format(
-                                    actor.get("name", "Unknown"),
-                                    actor.get("role", "Unknown"),
-                                    actor.get("influence_score", 0),
-                                    actor.get("metrics", {}).get("sent", 0),
-                                    actor.get("metrics", {}).get("received", 0),
-                                    actor.get("metrics", {}).get("degree_centrality", 0),
-                                    actor.get("metrics", {}).get("betweenness_centrality", 0),
-                                    actor.get("metrics", {}).get("pagerank", 0),
-                                )
-                            except Exception as e:
-                                logger.error(f"Error formatting actor data: {e}")
-                                continue
-                        html += "</div>"
+                # Extract topic number
+                topic_num = int(topic_id.split()[-1])
 
-                    # Add significant events section
-                    if "significant_events" in story and story["significant_events"]:
-                        html += """
-                        <div class="section">
-                            <h2>Significant Events</h2>
-                        """
-                        for event in story["significant_events"].get("events", []):
-                            try:
-                                html += """
-                                <div class="story significant-event">
-                                    <div class="story-title">Event on {}</div>
-                                    <div class="story-details">
-                                        <p>Significance: {:.2f}</p>
-                                        <p>{}</p>
-                                        <p>Key Topics: {}</p>
-                                        <p>Sample Subjects:</p>
-                                        <ul>
-                                """.format(
-                                    event.get("date", "Unknown"),
-                                    event.get("significance", 0),
-                                    event.get("description", "No description available"),
-                                    ", ".join(event.get("key_topics", [])),
-                                )
-                                for subject in event.get("sample_subjects", []):
-                                    html += f"<li>{subject}</li>"
-                                html += """
-                                        </ul>
-                                    </div>
-                                </div>
-                                """
-                            except Exception as e:
-                                logger.error(f"Error formatting event data: {e}")
-                                continue
-                        html += "</div>"
+                # Get topic evolution data
+                topic_counts = topic_evolution.get("topic_counts", {})
+                topic_trend = self._analyze_topic_trend(topic_counts, topic_num)
 
-                    # Add email threads section
-                    if "email_threads" in story and story["email_threads"]:
-                        html += """
-                        <div class="section">
-                            <h2>Email Threads</h2>
-                        """
-                        for thread in story["email_threads"].get("threads", []):
-                            try:
-                                html += """
-                                <div class="story email-thread">
-                                    <div class="story-title">{}</div>
-                                    <div class="story-details">
-                                        <p>Size: {} emails</p>
-                                        <p>Participants: {}</p>
-                                        <p>Time Span: {} to {}</p>
-                                    </div>
-                                </div>
-                                """.format(
-                                    thread.get("subject", "Unknown"),
-                                    thread.get("size", 0),
-                                    ", ".join(thread.get("participants", [])[:5])
-                                    + ("..." if len(thread.get("participants", [])) > 5 else ""),
-                                    thread.get("timeline", {}).get("start", "Unknown"),
-                                    thread.get("timeline", {}).get("end", "Unknown"),
-                                )
-                            except Exception as e:
-                                logger.error(f"Error formatting thread data: {e}")
-                                continue
-                        html += "</div>"
+                story = {
+                    "title": f"The Evolution of {topic_id}",
+                    "type": "topic_evolution",
+                    "topic_id": topic_id,
+                    "keywords": keywords,
+                    "topic_metrics": {
+                        "trend": topic_trend["trend"],
+                        "peak_period": topic_trend["peak_period"],
+                        "peak_count": topic_trend["peak_count"],
+                    },
+                    "related_emails": topic_emails,
+                    "summary": self._generate_topic_summary(
+                        topic_id,
+                        keywords,
+                        topic_trend,
+                    ),
+                }
+                stories.append(story)
 
-                    # Add topic evolution section
-                    if "topic_evolution" in story and story["topic_evolution"]:
-                        html += """
-                        <div class="section">
-                            <h2>Topic Evolution</h2>
-                        """
-                        for topic in story["topic_evolution"].get("key_topics", []):
-                            try:
-                                html += """
-                                <div class="story topic-evolution">
-                                    <div class="story-title">Topic {}</div>
-                                    <div class="story-details">
-                                        <p>Keywords: {}</p>
-                                        <p>Significance: {}</p>
-                                    </div>
-                                </div>
-                                """.format(
-                                    topic.get("id", "Unknown"),
-                                    ", ".join(topic.get("keywords", [])),
-                                    topic.get("significance", 0),
-                                )
-                            except Exception as e:
-                                logger.error(f"Error formatting topic data: {e}")
-                                continue
-                        html += "</div>"
+        return stories
 
-                    # Add narrative summary
-                    if "narrative_summary" in story:
-                        try:
-                            html += """
-                            <div class="section">
-                                <h2>Narrative Summary</h2>
-                                <div class="story">
-                                    <div class="story-summary">{}</div>
-                                </div>
-                            </div>
-                            """.format(
-                                story["narrative_summary"]
-                            )
-                        except Exception as e:
-                            logger.error(f"Error formatting narrative summary: {e}")
+    def _generate_actor_summary(
+        self,
+        actor,
+        metrics,
+        common_words,
+        busiest_day,
+        busiest_day_count,
+        avg_response_time,
+    ):
+        """Generate a summary for a key actor story."""
+        # Create an engaging hook
+        name = actor.split("@")[0].replace(".", " ").title()
+        summary = f"Unveiling the Digital Footprint: The Enron Emails of {name}\n\n"
 
-                except Exception as e:
-                    logger.error(f"Error processing story section: {e}")
-                    continue
+        # Add role and influence context
+        influence_score = (
+            metrics.get("degree_centrality", 0)
+            + metrics.get("betweenness_centrality", 0)
+            + metrics.get("pagerank", 0)
+        ) / 3
+        influence_level = (
+            "highly influential"
+            if influence_score > 0.1
+            else "moderately influential"
+            if influence_score > 0.05
+            else "influential"
+        )
+        summary += f"In the intricate web of Enron's corporate communications, {name} emerges as a {influence_level} figure, "
+        summary += (
+            f"having sent {metrics['sent']} emails and received {metrics['received']} emails. "
+        )
 
-            html += """
-            </body>
-            </html>
-            """
+        # Add communication patterns with context
+        summary += f"\n\nCommunication Patterns:\n"
+        summary += f"• Peak Activity: {name} is most active on {busiest_day}s, sending {busiest_day_count} emails. "
+        if avg_response_time:
+            response_context = (
+                "remarkably quick"
+                if avg_response_time < 4
+                else "moderate"
+                if avg_response_time < 8
+                else "deliberate"
+            )
+            summary += f"This suggests a {response_context} response pattern, with an average response time of {avg_response_time:.1f} hours. "
 
-            return html
+        # Add topic analysis with deeper context
+        summary += f"\n\nKey Focus Areas:\n"
+        top_topics = [word for word, _ in common_words[:5]]
+        topic_counts = [count for _, count in common_words[:5]]
+        topic_analysis = []
+        for topic, count in zip(top_topics, topic_counts):
+            if topic.lower() in ["energy", "power", "gas"]:
+                topic_analysis.append(f"energy sector operations ({count} mentions)")
+            elif topic.lower() in ["state", "regulatory", "policy"]:
+                topic_analysis.append(f"regulatory affairs ({count} mentions)")
+            elif topic.lower() in ["market", "trading", "price"]:
+                topic_analysis.append(f"market activities ({count} mentions)")
+            else:
+                topic_analysis.append(f"{topic} ({count} mentions)")
 
-        except Exception as e:
-            logger.error(e)
-            logger.error(f"Error generating HTML report: {e}")
+        summary += f"• Primary Focus: {', '.join(topic_analysis[:-1])}, and {topic_analysis[-1]}. "
+
+        # Add network analysis
+        summary += f"\n\nNetwork Impact:\n"
+        summary += f"• Influence Score: {influence_score:.3f} (combining centrality measures)\n"
+        summary += f"• Communication Reach: {metrics.get('degree_centrality', 0):.3f} (direct connections)\n"
+        summary += (
+            f"• Information Flow: {metrics.get('betweenness_centrality', 0):.3f} (brokerage role)\n"
+        )
+        summary += (
+            f"• Overall Importance: {metrics.get('pagerank', 0):.3f} (network-wide significance)"
+        )
+
+        # Add temporal analysis
+        summary += f"\n\nTemporal Patterns:\n"
+        if busiest_day_count > 10:
+            summary += f"• High Activity: {name} shows intense engagement on {busiest_day}s, suggesting this day may be crucial for weekly operations or reporting.\n"
+        if avg_response_time and avg_response_time < 4:
+            summary += f"• Quick Response: The rapid response time indicates a key operational role or high-priority communications.\n"
+
+        # Add concluding insights
+        summary += f"\n\nKey Insights:\n"
+        if influence_score > 0.1:
+            summary += f"• {name} plays a central role in Enron's communication network, acting as a key information hub.\n"
+        if any("energy" in topic.lower() for topic in top_topics):
+            summary += f"• Strong focus on energy sector operations suggests involvement in core business activities.\n"
+        if avg_response_time and avg_response_time < 4:
+            summary += (
+                f"• Quick response times indicate a hands-on role in critical communications.\n"
+            )
+
+        return summary
+
+    def _generate_event_summary(
+        self,
+        date,
+        email_count,
+        deviation,
+        common_words,
+        event_metrics,
+    ):
+        """Generate a summary for a significant event story."""
+        # Create an engaging hook
+        summary = f"Unusual Activity Detected: Email Surge on {date}\n\n"
+
+        # Add event significance
+        significance_level = (
+            "extremely significant"
+            if deviation > 3
+            else "highly significant"
+            if deviation > 2
+            else "significant"
+        )
+        summary += f"A {significance_level} spike in email activity was detected, with {email_count} emails exchanged "
+        summary += f"({deviation:.1f} standard deviations above normal). "
+
+        # Add participant analysis
+        summary += f"\n\nParticipant Analysis:\n"
+        summary += f"• Scale: {event_metrics['participant_count']} individuals were involved in this communication surge\n"
+        summary += f"• Engagement: Average email length of {event_metrics['avg_email_length']:.0f} characters suggests "
+        summary += f"{'detailed discussions' if event_metrics['avg_email_length'] > 500 else 'brief exchanges'}\n"
+        summary += f"• Interaction: Reply rate of {event_metrics['reply_rate']:.1%} indicates "
+        summary += f"{'highly interactive' if event_metrics['reply_rate'] > 0.5 else 'moderate'} communication patterns"
+
+        # Add topic analysis
+        summary += f"\n\nKey Topics:\n"
+        top_words = [word for word, _ in common_words[:5]]
+        word_counts = [count for _, count in common_words[:5]]
+        topic_analysis = []
+        for word, count in zip(top_words, word_counts):
+            if word.lower() in ["urgent", "emergency", "critical"]:
+                topic_analysis.append(f"urgent matters ({count} mentions)")
+            elif word.lower() in ["meeting", "conference", "call"]:
+                topic_analysis.append(f"coordination activities ({count} mentions)")
+            elif word.lower() in ["report", "update", "status"]:
+                topic_analysis.append(f"status updates ({count} mentions)")
+            else:
+                topic_analysis.append(f"{word} ({count} mentions)")
+
+        summary += f"• Primary Focus: {', '.join(topic_analysis[:-1])}, and {topic_analysis[-1]}\n"
+
+        # Add temporal context
+        summary += f"\n\nTemporal Context:\n"
+        if deviation > 3:
+            summary += f"• Exceptional Activity: This spike represents one of the most significant communication events in the dataset\n"
+        if event_metrics["reply_rate"] > 0.7:
+            summary += f"• Rapid Response: The high reply rate suggests urgent or time-sensitive matters were being discussed\n"
+        if event_metrics["avg_email_length"] > 1000:
+            summary += f"• Detailed Communication: The lengthy emails indicate complex or important discussions\n"
+
+        # Add potential implications
+        summary += f"\n\nPotential Implications:\n"
+        if any(word.lower() in ["urgent", "emergency", "critical"] for word in top_words):
+            summary += f"• This event may represent a critical business situation requiring immediate attention\n"
+        if event_metrics["participant_count"] > 10:
+            summary += f"• The large number of participants suggests a company-wide or department-wide communication event\n"
+        if event_metrics["reply_rate"] > 0.5:
+            summary += f"• The high level of interaction indicates active problem-solving or decision-making\n"
+
+        return summary
+
+    def _generate_thread_summary(
+        self,
+        subject,
+        num_emails,
+        num_participants,
+        start_date,
+        end_date,
+        duration,
+        avg_response_time,
+    ):
+        """Generate a summary for an email thread story."""
+        # Create an engaging hook
+        summary = f"Thread Analysis: '{subject}'\n\n"
+
+        # Add thread overview
+        thread_size = (
+            "extensive" if num_emails > 10 else "substantial" if num_emails > 5 else "moderate"
+        )
+        summary += f"An {thread_size} email thread involving {num_participants} participants "
+        summary += f"unfolded over {num_emails} messages. "
+
+        # Add temporal analysis
+        if start_date and end_date:
+            summary += f"\n\nTemporal Analysis:\n"
+            summary += f"• Duration: {duration:.1f} hours from {start_date} to {end_date}\n"
+            if duration:
+                pace = "rapid" if duration < 24 else "moderate" if duration < 72 else "extended"
+                summary += f"• Pace: {pace} discussion pace\n"
+            if avg_response_time:
+                response_character = (
+                    "immediate"
+                    if avg_response_time < 2
+                    else "prompt"
+                    if avg_response_time < 6
+                    else "deliberate"
+                )
+                summary += f"• Response Pattern: {response_character} responses (avg. {avg_response_time:.1f} hours)\n"
+
+        # Add participant analysis
+        summary += f"\n\nParticipant Dynamics:\n"
+        if num_participants > 5:
+            summary += (
+                f"• Scale: Large group discussion involving {num_participants} participants\n"
+            )
+        elif num_participants > 2:
+            summary += f"• Scale: Multi-party conversation with {num_participants} participants\n"
+        else:
+            summary += f"• Scale: Direct exchange between {num_participants} participants\n"
+
+        # Add thread characteristics
+        summary += f"\n\nThread Characteristics:\n"
+        if num_emails > 10:
+            summary += f"• Depth: Extensive discussion with multiple sub-threads\n"
+        if avg_response_time and avg_response_time < 4:
+            summary += f"• Urgency: Quick response times suggest time-sensitive matters\n"
+        if duration and duration > 72:
+            summary += f"• Persistence: Extended duration indicates ongoing or complex discussion\n"
+
+        # Add potential implications
+        summary += f"\n\nPotential Significance:\n"
+        if num_participants > 5 and avg_response_time and avg_response_time < 4:
+            summary += f"• This thread may represent a critical decision-making process or urgent coordination effort\n"
+        if duration and duration > 72:
+            summary += f"• The extended duration suggests complex or ongoing business matters\n"
+        if num_emails > 10:
+            summary += f"• The high message count indicates detailed discussion or multiple decision points\n"
+
+        return summary
+
+    def _generate_topic_summary(
+        self,
+        topic_id,
+        keywords,
+        topic_trend,
+    ):
+        """Generate a summary for a topic evolution story."""
+        # Create an engaging hook
+        summary = f"Topic Evolution: {topic_id}\n\n"
+
+        # Add topic overview
+        summary += f"Analysis of communication patterns reveals the evolution of {topic_id}, "
+        summary += f"characterized by keywords such as {', '.join(keywords[:3])}. "
+
+        # Add trend analysis
+        summary += f"\n\nTrend Analysis:\n"
+        trend_character = {
+            "increasing": "growing",
+            "decreasing": "declining",
+            "stable": "consistent",
+        }.get(topic_trend["trend"], "variable")
+
+        summary += f"• Overall Trend: {trend_character} interest in this topic\n"
+        if topic_trend["peak_period"]:
+            summary += f"• Peak Activity: {topic_trend['peak_count']} mentions during {topic_trend['peak_period']}\n"
+
+        # Add keyword analysis
+        summary += f"\n\nKeyword Analysis:\n"
+        keyword_categories = {
+            "energy": "energy sector",
+            "power": "power operations",
+            "gas": "gas operations",
+            "market": "market activities",
+            "trading": "trading operations",
+            "price": "pricing",
+            "state": "regulatory affairs",
+            "regulatory": "regulatory matters",
+            "policy": "policy issues",
+        }
+
+        categorized_keywords = []
+        for keyword in keywords[:5]:
+            category = next(
+                (v for k, v in keyword_categories.items() if k in keyword.lower()), None
+            )
+            if category:
+                categorized_keywords.append(f"{category} ({keyword})")
+            else:
+                categorized_keywords.append(keyword)
+
+        summary += f"• Primary Focus: {', '.join(categorized_keywords[:-1])}, and {categorized_keywords[-1]}\n"
+
+        # Add temporal patterns
+        summary += f"\n\nTemporal Patterns:\n"
+        if topic_trend["trend"] == "increasing":
+            summary += f"• Growing Interest: The topic shows increasing relevance over time\n"
+        elif topic_trend["trend"] == "decreasing":
+            summary += f"• Declining Focus: The topic shows decreasing prominence\n"
+        else:
+            summary += f"• Stable Presence: The topic maintains consistent attention\n"
+
+        # Add potential implications
+        summary += f"\n\nPotential Implications:\n"
+        if topic_trend["trend"] == "increasing":
+            summary += f"• This topic may represent an emerging area of focus or concern\n"
+        if topic_trend["peak_count"] > 50:
+            summary += f"• The high peak activity suggests significant business impact\n"
+        if any(kw.lower() in ["urgent", "critical", "emergency"] for kw in keywords):
+            summary += f"• The presence of urgent keywords indicates time-sensitive matters\n"
+
+        return summary
+
+    def _analyze_topic_trend(self, topic_counts, topic_num):
+        """Analyze the trend of a topic over time."""
+        if not topic_counts:
+            return {"trend": "unknown", "peak_period": None, "peak_count": 0}
+
+        # Extract counts for this topic
+        topic_data = {period: counts.get(topic_num, 0) for period, counts in topic_counts.items()}
+
+        if not topic_data:
+            return {"trend": "unknown", "peak_period": None, "peak_count": 0}
+
+        # Find peak period
+        peak_period = max(topic_data.items(), key=lambda x: x[1])
+
+        # Determine trend
+        values = list(topic_data.values())
+        if len(values) < 2:
+            trend = "stable"
+        else:
+            slope = np.polyfit(range(len(values)), values, 1)[0]
+            if slope > 0.1:
+                trend = "increasing"
+            elif slope < -0.1:
+                trend = "decreasing"
+            else:
+                trend = "stable"
+
+        return {
+            "trend": trend,
+            "peak_period": peak_period[0],
+            "peak_count": peak_period[1],
+        }
 
 
 if __name__ == "__main__":

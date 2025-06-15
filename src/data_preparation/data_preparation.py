@@ -1071,7 +1071,7 @@ class DataPreparation:
                     file_path = os.path.join(root, filename)
                     if os.path.isfile(file_path):
                         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                            if i == 100:
+                            if i == 50:
                                 break
                             i += 1
                             raw_text = f.read()

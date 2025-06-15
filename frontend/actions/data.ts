@@ -11,14 +11,21 @@ import { and, count, desc, isNotNull, ne, notIlike } from 'drizzle-orm';
 
 export async function getProcessedEmails(
 	pageNum = 1,
-): Promise<ProcessedEmail[]> {
-	const limit = 10;
-	const emails = await db
-		.select()
-		.from(processedEmails)
-		.limit(limit)
-		.offset(pageNum * limit);
-	return emails;
+	pageSize = 10,
+): Promise<{ data: ProcessedEmail[]; total: number }> {
+	const [data, total] = await Promise.all([
+		db
+			.select()
+			.from(processedEmails)
+			.limit(pageSize)
+			.offset((pageNum - 1) * pageSize),
+		db
+			.select({ count: count() })
+			.from(processedEmails)
+			.then((result) => result[0].count),
+	]);
+
+	return { data, total };
 }
 
 export async function getTopEmailSenders() {
@@ -66,4 +73,36 @@ export async function getVisualizationImagesLinks() {
 		.from(visualizationData)
 		.where(notIlike(visualizationData.fileUrl, '%html%'));
 	return images;
+}
+
+export async function getProcessedEmailsAction({
+	page,
+	perPage,
+	sort,
+	filters,
+	joinOperator,
+	filterFlag,
+	subject,
+}: {
+	page: number;
+	perPage: number;
+	sort: { id: string; desc: boolean }[];
+	filters: { id: string; value: string }[];
+	joinOperator: 'and' | 'or';
+	filterFlag: 'basicFilters' | 'advancedFilters';
+	subject: string;
+}): Promise<{ data: ProcessedEmail[]; total: number }> {
+	const [data, total] = await Promise.all([
+		db
+			.select()
+			.from(processedEmails)
+			.limit(perPage)
+			.offset((page - 1) * perPage),
+		db
+			.select({ count: count() })
+			.from(processedEmails)
+			.then((result) => result[0].count),
+	]);
+
+	return { data, total };
 }
