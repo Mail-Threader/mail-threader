@@ -1,10 +1,10 @@
 # Enron Email Analysis Pipeline
 
-This project provides a comprehensive pipeline for analyzing the Enron email dataset. It includes modules for data preparation, summarization/classification, visualization, and story development.
+This project provides a comprehensive pipeline for analyzing the Enron email dataset. It includes modules for data preparation, summarization/classification, visualization, and story development, along with a modern web interface for interacting with the analysis results.
 
 ## Project Structure
 
-- `src/`: Contains all source code
+- `src/`: Contains all backend source code
   - `main.py`: Main entry point for the pipeline
   - `data_preparation/`: Module for loading and preprocessing email data
     - `data_preparation.py`: Implementation of the DataPreparation class
@@ -22,16 +22,25 @@ This project provides a comprehensive pipeline for analyzing the Enron email dat
     - `utils.py`: Implementation of utility functions
     - `__init__.py`: Exports utility functions
   - `__init__.py`: Package initialization file
+- `frontend/`: Next.js web application
+  - `app/`: Next.js app directory with pages and layouts
+  - `components/`: Reusable React components
+  - `lib/`: Frontend utility functions and API clients
+  - `db/`: Database models and utilities
 - `tests/`: Test files
   - `unit/`: Unit tests for individual components
   - `integration/`: Integration tests for module interactions
 - `data/`: Directory containing the Enron email dataset
 - `output/`: Directory where all results will be stored (created automatically)
+- `.github/`: GitHub Actions workflows and templates
+- `.vscode/`: VS Code configuration files
 
 ## Prerequisites
 
 - Python 3.9 or higher
+- Node.js 18 or higher
 - Required Python packages (listed in requirements.txt)
+- Required Node.js packages (listed in frontend/package.json)
 
 ## Quick Start for New Team Members
 
@@ -63,7 +72,12 @@ These scripts will set up your development environment automatically, including 
 2. Install the required dependencies:
 
 ```bash
+# Install Python dependencies
 pip install -r requirements.txt
+
+# Install frontend dependencies
+cd frontend
+npm install
 ```
 
 ### For Developers
@@ -82,7 +96,14 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 ```
 
-4. Install pre-commit hooks:
+4. Install frontend dependencies:
+
+```bash
+cd frontend
+npm install
+```
+
+5. Install pre-commit hooks:
 
 ```bash
 pre-commit install
@@ -90,9 +111,11 @@ pre-commit install
 
 ## How to Run
 
+### Backend
+
 The main entry point for the pipeline is `src/main.py`. You can run it with various command-line arguments to customize the execution.
 
-### Basic Usage
+#### Basic Usage
 
 ```bash
 python src/main.py
@@ -100,27 +123,29 @@ python src/main.py
 
 This will run the entire pipeline with default settings, using the data in the `data/` directory and storing results in the `output/` directory.
 
-### Command-line Arguments
+#### Command-line Arguments
 
 - `--data-dir`: Directory containing the email data files (default: `./data/`)
 - `--output-dir`: Directory to store all output files (default: `./output/`)
-- `--skip-data-prep`: Skip data preparation step (use existing processed data)
-- `--skip-analysis`: Skip summarization and classification step (use existing analysis results)
-- `--skip-visualization`: Skip visualization step
-- `--skip-stories`: Skip story development step
+- `--skip`: Steps to skip (can specify multiple steps)
+  - Available steps: `data-prep`, `analysis`, `vis`, `story`
+  - Example: `--skip data-prep analysis`
+- `--run`: Steps to run (can specify multiple steps)
+  - Available steps: `data-prep`, `analysis`, `vis`, `story`
+  - Example: `--run vis story`
 
 ### Examples
 
-Run only the data preparation step:
+Run only the visualization and story development steps:
 
 ```bash
-python src/main.py --skip-analysis --skip-visualization --skip-stories
+python src/main.py --run vis story
 ```
 
-Run visualization and story development using existing processed data and analysis results:
+Skip data preparation and analysis steps:
 
 ```bash
-python src/main.py --skip-data-prep --skip-analysis
+python src/main.py --skip data-prep analysis
 ```
 
 Use a different data directory:
@@ -129,60 +154,54 @@ Use a different data directory:
 python src/main.py --data-dir /path/to/enron/emails
 ```
 
-## Output
+### Frontend
 
-The pipeline creates the following output directories:
-
-- `output/processed_data/`: Contains processed email data
-- `output/analysis_results/`: Contains results from summarization and classification
-- `output/visualizations/`: Contains all generated visualizations
-- `output/stories/`: Contains generated stories and narratives
-
-A final HTML report is also generated in the main output directory, providing links to all results.
-
-## Individual Modules
-
-You can also run each module individually:
+To run the frontend development server:
 
 ```bash
-python -m src.data_preparation.data_preparation
-python -m src.summarization_classification.summarization_classification
-python -m src.visualization.visualization
-python -m src.story_development.story_development
+cd frontend
+npm run dev
 ```
 
-Each module will look for the necessary input files from previous steps and generate its own outputs.
+This will start the Next.js development server at http://localhost:3000.
 
 ## Development
+
+### Using the Makefile
+
+The project includes a Makefile with several useful commands:
+
+```bash
+make help              # Display help information
+make clean            # Remove build artifacts
+make lint             # Check code style
+make format           # Format code
+make test             # Run tests
+make coverage         # Generate coverage reports
+make docs             # Generate documentation
+make dist             # Build package
+make install          # Install package
+make dev-install      # Install in development mode
+```
 
 ### Code Style
 
 This project uses the following tools to ensure code quality:
 
-- **Black**: Code formatting
-- **isort**: Import sorting
-- **Ruff**: Linting
-- **mypy**: Type checking
+- **Backend**:
+  - Black: Code formatting
+  - isort: Import sorting
+  - Ruff: Linting
+  - mypy: Type checking
 
-You can run these tools using VS Code tasks or from the command line:
-
-```bash
-# Format code
-black src tests
-
-# Sort imports
-isort src tests
-
-# Lint code
-ruff check src tests
-
-# Type check
-mypy src
-```
+- **Frontend**:
+  - ESLint: JavaScript/TypeScript linting
+  - Prettier: Code formatting
+  - TypeScript: Static type checking
 
 ### Testing
 
-We use pytest for testing. To run the tests:
+#### Backend Tests
 
 ```bash
 pytest
@@ -194,9 +213,18 @@ To run tests with coverage:
 pytest --cov=src --cov-report=html
 ```
 
+#### Frontend Tests
+
+```bash
+cd frontend
+npm test
+```
+
 ### Documentation
 
-We use Sphinx for documentation. To build the documentation:
+We use Sphinx for backend documentation and Next.js documentation for the frontend.
+
+To build the backend documentation:
 
 ```bash
 cd docs
@@ -204,23 +232,6 @@ make html
 ```
 
 The built documentation will be in `docs/build/html/`.
-
-### VS Code Integration
-
-This project includes VS Code configuration files:
-
-- `settings.json`: Editor settings, Python settings, linting, formatting
-- `launch.json`: Debug configurations
-- `tasks.json`: Common tasks like testing, linting, formatting
-
-### Continuous Integration
-
-GitHub Actions workflows are set up to run on each push and pull request:
-
-- Linting and type checking
-- Testing on multiple Python versions
-- Building the package
-- Building documentation
 
 ## Contributing
 

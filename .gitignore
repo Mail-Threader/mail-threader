@@ -133,7 +133,6 @@ extra/
 # ruff cache
 .ruff_cache/
 
-
 # frontend
 /frontend/node_modules/
 /frontend/.git/

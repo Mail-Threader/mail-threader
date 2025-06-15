@@ -1,3 +1,4 @@
+import logging
 import os
 import pickle
 import re
@@ -17,6 +18,10 @@ from wordcloud import WordCloud
 
 from utils import save_to_postgresql, upload_to_supabase
 
+logging.getLogger("matplotlib").setLevel(logging.ERROR)
+
+SOMPY_AVAILABLE = False
+
 try:
     import sompy
     from sompy.visualization.bmuhits import BmuHitsView
@@ -24,7 +29,6 @@ try:
 
     SOMPY_AVAILABLE = True
 except ImportError:
-    SOMPY_AVAILABLE = False
     logger.warning("sompy package not available. Kohonen map visualization will be disabled.")
 
 
@@ -246,7 +250,7 @@ class Visualization:
 
         # Save the figure
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_path = os.path.join(self.output_dir, f"email_volume_{timestamp}.png")
+        output_path = os.path.join(self.output_dir, f"email_volume_{timestamp}_v1.png")
         plt.savefig(output_path, dpi=300, bbox_inches="tight")
         plt.close()
 
@@ -365,7 +369,7 @@ class Visualization:
 
         # Save the figure
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_path = os.path.join(self.output_dir, f"email_network_{timestamp}.png")
+        output_path = os.path.join(self.output_dir, f"email_network_{timestamp}_v1.png")
         plt.savefig(output_path, dpi=300, bbox_inches="tight")
         plt.close()
 
@@ -435,7 +439,7 @@ class Visualization:
 
         # Save the figure
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_path = os.path.join(self.output_dir, f"topics_{timestamp}.png")
+        output_path = os.path.join(self.output_dir, f"topics_{timestamp}_v1.png")
         plt.savefig(output_path, dpi=300, bbox_inches="tight")
         plt.close()
 
@@ -488,7 +492,7 @@ class Visualization:
             fig.update_layout(showlegend=False, margin=dict(l=0, r=0, t=50, b=0))
 
             # Save as HTML
-            html_path = os.path.join(self.output_dir, f"topics_interactive_{timestamp}.html")
+            html_path = os.path.join(self.output_dir, f"topics_interactive_{timestamp}_v1.html")
             fig.write_html(html_path)
             logger.info(f"Saved interactive topic visualization to {html_path}")
 
@@ -557,7 +561,7 @@ class Visualization:
 
         # Save the figure
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_path = os.path.join(self.output_dir, f"clusters_size_{timestamp}.png")
+        output_path = os.path.join(self.output_dir, f"clusters_size_{timestamp}_v1.png")
         plt.savefig(output_path, dpi=300, bbox_inches="tight")
         plt.close()
 
@@ -601,7 +605,7 @@ class Visualization:
         plt.tight_layout()
 
         # Save the figure
-        wordcloud_path = os.path.join(self.output_dir, f"clusters_wordcloud_{timestamp}.png")
+        wordcloud_path = os.path.join(self.output_dir, f"clusters_wordcloud_{timestamp}_v1.png")
         plt.savefig(wordcloud_path, dpi=300, bbox_inches="tight")
         plt.close()
 
@@ -678,7 +682,7 @@ class Visualization:
 
         # Save the figure
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_path = os.path.join(self.output_dir, f"entities_{timestamp}.png")
+        output_path = os.path.join(self.output_dir, f"entities_{timestamp}_v1.png")
         plt.savefig(output_path, dpi=300, bbox_inches="tight")
         plt.close()
 
@@ -739,7 +743,7 @@ class Visualization:
 
         # Save the figure
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_path = os.path.join(self.output_dir, f"sentiment_{timestamp}.png")
+        output_path = os.path.join(self.output_dir, f"sentiment_{timestamp}_v1.png")
         plt.savefig(output_path, dpi=300, bbox_inches="tight")
         plt.close()
 
@@ -846,9 +850,9 @@ class Visualization:
             # Save the figures
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-            u_matrix_path = os.path.join(self.output_dir, f"som_umatrix_{timestamp}.png")
-            component_path = os.path.join(self.output_dir, f"som_components_{timestamp}.png")
-            hits_path = os.path.join(self.output_dir, f"som_hits_{timestamp}.png")
+            u_matrix_path = os.path.join(self.output_dir, f"som_umatrix_{timestamp}_v1.png")
+            component_path = os.path.join(self.output_dir, f"som_components_{timestamp}_v1.png")
+            hits_path = os.path.join(self.output_dir, f"som_hits_{timestamp}_v1.png")
 
             view.save(u_matrix_path, dpi=300, bbox_inches="tight")
             view2.save(component_path, dpi=300, bbox_inches="tight")
@@ -899,6 +903,241 @@ class Visualization:
             logger.error(f"Error creating Kohonen map: {e}")
             return None
 
+    def visualize_summaries(self, analysis_results):
+        """
+        Visualize summarization results with multiple charts and graphs.
+
+        Args:
+            analysis_results (dict): Dictionary containing analysis results
+
+        Returns:
+            dict: Dictionary containing paths to all summary visualizations
+        """
+        logger.info("Visualizing summarization results")
+
+        if (
+            analysis_results is None
+            or "summaries" not in analysis_results
+            or analysis_results["summaries"] is None
+        ):
+            logger.warning("No summarization results available for visualization")
+            return None
+
+        summaries = analysis_results["summaries"]
+        metadata = analysis_results.get("metadata", {})
+
+        # Create a timestamp for file naming
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        visualization_paths = {}
+
+        try:
+            # 1. Summary Length Distribution by Style
+            plt.figure(figsize=(12, 6))
+            style_lengths = {}
+            for subject, styles in summaries.items():
+                for style, summary in styles.items():
+                    if style not in style_lengths:
+                        style_lengths[style] = []
+                    style_lengths[style].append(summary["metrics"]["word_count"])
+
+            # Create box plot
+            plt.boxplot(
+                [lengths for lengths in style_lengths.values()], labels=list(style_lengths.keys())
+            )
+            plt.title("Summary Length Distribution by Style")
+            plt.xlabel("Summary Style")
+            plt.ylabel("Word Count")
+            plt.xticks(rotation=45)
+            plt.grid(True, axis="y")
+
+            # Save the figure
+            length_path = os.path.join(self.output_dir, f"summary_lengths_{timestamp}_v1.png")
+            plt.savefig(length_path, dpi=300, bbox_inches="tight")
+            plt.close()
+            visualization_paths["summary_lengths"] = length_path
+
+            # 2. Entity Distribution by Style
+            plt.figure(figsize=(12, 6))
+            style_entities = {}
+            for subject, styles in summaries.items():
+                for style, summary in styles.items():
+                    if style not in style_entities:
+                        style_entities[style] = Counter()
+                    entities = summary["key_information"]["entities"]
+                    for entity_type, entity_list in entities.items():
+                        style_entities[style][entity_type] += len(entity_list)
+
+            # Create stacked bar chart
+            entity_types = set()
+            for counts in style_entities.values():
+                entity_types.update(counts.keys())
+
+            x = np.arange(len(style_entities))
+            width = 0.8 / len(entity_types)
+
+            for i, entity_type in enumerate(sorted(entity_types)):
+                values = [
+                    style_entities[style].get(entity_type, 0) for style in style_entities.keys()
+                ]
+                plt.bar(x + i * width, values, width, label=entity_type)
+
+            plt.title("Entity Distribution by Summary Style")
+            plt.xlabel("Summary Style")
+            plt.ylabel("Number of Entities")
+            plt.xticks(x + width * (len(entity_types) - 1) / 2, style_entities.keys(), rotation=45)
+            plt.legend()
+            plt.grid(True, axis="y")
+
+            # Save the figure
+            entity_path = os.path.join(self.output_dir, f"summary_entities_{timestamp}_v1.png")
+            plt.savefig(entity_path, dpi=300, bbox_inches="tight")
+            plt.close()
+            visualization_paths["summary_entities"] = entity_path
+
+            # 3. Action Items by Style
+            plt.figure(figsize=(12, 6))
+            style_actions = {}
+            for subject, styles in summaries.items():
+                for style, summary in styles.items():
+                    if style not in style_actions:
+                        style_actions[style] = []
+                    style_actions[style].append(len(summary["key_information"]["action_items"]))
+
+            # Create bar chart
+            plt.bar(style_actions.keys(), [sum(actions) for actions in style_actions.values()])
+            plt.title("Total Action Items by Summary Style")
+            plt.xlabel("Summary Style")
+            plt.ylabel("Number of Action Items")
+            plt.xticks(rotation=45)
+            plt.grid(True, axis="y")
+
+            # Save the figure
+            action_path = os.path.join(self.output_dir, f"summary_actions_{timestamp}_v1.png")
+            plt.savefig(action_path, dpi=300, bbox_inches="tight")
+            plt.close()
+            visualization_paths["summary_actions"] = action_path
+
+            # 4. Interactive Summary Dashboard using Plotly
+            fig = make_subplots(
+                rows=2,
+                cols=2,
+                subplot_titles=(
+                    "Summary Length Distribution",
+                    "Entity Distribution",
+                    "Action Items Distribution",
+                    "Summary Metrics Overview",
+                ),
+                specs=[[{"type": "box"}, {"type": "bar"}], [{"type": "bar"}, {"type": "scatter"}]],
+            )
+
+            # Add box plot for summary lengths
+            for style, lengths in style_lengths.items():
+                fig.add_trace(go.Box(y=lengths, name=style), row=1, col=1)
+
+            # Add stacked bar chart for entities
+            for entity_type in sorted(entity_types):
+                values = [
+                    style_entities[style].get(entity_type, 0) for style in style_entities.keys()
+                ]
+                fig.add_trace(
+                    go.Bar(name=entity_type, x=list(style_entities.keys()), y=values), row=1, col=2
+                )
+
+            # Add bar chart for action items
+            fig.add_trace(
+                go.Bar(
+                    x=list(style_actions.keys()),
+                    y=[sum(actions) for actions in style_actions.values()],
+                    name="Action Items",
+                ),
+                row=2,
+                col=1,
+            )
+
+            # Add scatter plot for metrics overview
+            metrics = ["word_count", "sentence_count", "entity_count", "action_item_count"]
+            for metric in metrics:
+                values = []
+                for subject, styles in summaries.items():
+                    for style, summary in styles.items():
+                        values.append(summary["metrics"][metric])
+                fig.add_trace(
+                    go.Scatter(
+                        x=list(range(len(values))),
+                        y=values,
+                        mode="lines+markers",
+                        name=metric.replace("_", " ").title(),
+                    ),
+                    row=2,
+                    col=2,
+                )
+
+            # Update layout
+            fig.update_layout(
+                height=1000,
+                width=1200,
+                title_text="Summary Analysis Dashboard",
+                showlegend=True,
+                barmode="stack",
+            )
+
+            # Save as HTML
+            dashboard_path = os.path.join(self.output_dir, f"summary_dashboard_{timestamp}_v1.html")
+            fig.write_html(dashboard_path)
+            visualization_paths["summary_dashboard"] = dashboard_path
+
+            # 5. Word Clouds for each summary style
+            plt.figure(figsize=(15, 5 * len(style_lengths)))
+            for i, (style, _) in enumerate(style_lengths.items()):
+                plt.subplot(len(style_lengths), 1, i + 1)
+
+                # Combine all summaries of this style
+                all_text = " ".join(
+                    [
+                        summaries[subject][style]["summary"]
+                        for subject in summaries
+                        if style in summaries[subject]
+                    ]
+                )
+
+                # Create word cloud
+                wordcloud = WordCloud(
+                    width=800,
+                    height=400,
+                    background_color="white",
+                    max_words=100,
+                    prefer_horizontal=1.0,
+                ).generate(all_text)
+
+                plt.imshow(wordcloud, interpolation="bilinear")
+                plt.title(f"Word Cloud - {style} Style")
+                plt.axis("off")
+
+            plt.tight_layout()
+
+            # Save the figure
+            wordcloud_path = os.path.join(self.output_dir, f"summary_wordclouds_{timestamp}_v1.png")
+            plt.savefig(wordcloud_path, dpi=300, bbox_inches="tight")
+            plt.close()
+            visualization_paths["summary_wordclouds"] = wordcloud_path
+
+            # Upload to Supabase if enabled
+            if self.save_to_supabase:
+                supabase_paths = {}
+                for viz_type, path in visualization_paths.items():
+                    supabase_url = upload_to_supabase(path)
+                    if supabase_url:
+                        supabase_paths[viz_type] = supabase_url
+
+                # Save URLs to database
+                self.save_file_url_to_database(supabase_paths)
+
+            return visualization_paths
+
+        except Exception as e:
+            logger.error(f"Error creating summary visualizations: {e}")
+            return None
+
     def create_dashboard(self, df, analysis_results):
         """
         Create an interactive dashboard with Plotly.
@@ -913,9 +1152,9 @@ class Visualization:
         logger.info("Creating interactive dashboard")
 
         try:
-            # Create a subplot figure
+            # Create a subplot figure with additional summary visualizations
             fig = make_subplots(
-                rows=3,
+                rows=4,
                 cols=2,
                 subplot_titles=(
                     "Email Volume Over Time",
@@ -924,12 +1163,16 @@ class Visualization:
                     "Cluster Sizes",
                     "Topic Distribution",
                     "Entity Counts",
+                    "Summary Length Distribution",
+                    "Action Items by Style",
                 ),
                 specs=[
                     [{"type": "xy"}, {"type": "xy"}],
                     [{"type": "pie"}, {"type": "bar"}],
                     [{"type": "bar"}, {"type": "bar"}],
+                    [{"type": "box"}, {"type": "bar"}],
                 ],
+                vertical_spacing=0.1,
             )
 
             # 1. Email Volume Over Time
@@ -1064,51 +1307,70 @@ class Visualization:
                     col=2,
                 )
 
+            # Add summary visualizations if available
+            if (
+                analysis_results
+                and "summaries" in analysis_results
+                and analysis_results["summaries"]
+            ):
+                summaries = analysis_results["summaries"]
+
+                # Summary Length Distribution
+                style_lengths = {}
+                for subject, styles in summaries.items():
+                    for style, summary in styles.items():
+                        if style not in style_lengths:
+                            style_lengths[style] = []
+                        style_lengths[style].append(summary["metrics"]["word_count"])
+
+                for style, lengths in style_lengths.items():
+                    fig.add_trace(go.Box(y=lengths, name=style), row=4, col=1)
+
+                # Action Items by Style
+                style_actions = {}
+                for subject, styles in summaries.items():
+                    for style, summary in styles.items():
+                        if style not in style_actions:
+                            style_actions[style] = []
+                        style_actions[style].append(len(summary["key_information"]["action_items"]))
+
+                fig.add_trace(
+                    go.Bar(
+                        x=list(style_actions.keys()),
+                        y=[sum(actions) for actions in style_actions.values()],
+                        name="Action Items",
+                    ),
+                    row=4,
+                    col=2,
+                )
+
             # Update layout
             fig.update_layout(
-                height=1200,
+                height=1600,
                 width=1200,
                 title_text="Enron Email Analysis Dashboard",
-                showlegend=False,
+                showlegend=True,
+                barmode="stack",
             )
 
             # Save as HTML
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_path = os.path.join(self.output_dir, f"dashboard_{timestamp}.html")
+            output_path = os.path.join(self.output_dir, f"dashboard_{timestamp}_v1.html")
             fig.write_html(output_path)
 
             logger.info(f"Saved interactive dashboard to {output_path}")
 
             # Upload to Supabase
-            supabase_url = upload_to_supabase(output_path)
-            if supabase_url:
-                logger.info(f"Uploaded interactive dashboard to Supabase: {supabase_url}")
+            if self.save_to_supabase:
+                supabase_url = upload_to_supabase(output_path)
+                if supabase_url:
+                    logger.info(f"Uploaded interactive dashboard to Supabase: {supabase_url}")
 
             return output_path
 
         except Exception as e:
-            print(e.with_traceback(None))
             logger.error(f"Error creating dashboard: {e}")
             return None
-
-    @staticmethod
-    def save_file_url_to_database(file_dict: dict[str, str]):
-        """
-        Save the file URL to the database.
-        Args:
-            file_dict (dict): Dictionary containing file URLs
-        """
-        # create a DataFrame from the file_dict
-        df = pd.DataFrame(file_dict.items(), columns=["file_type", "file_url"])
-        # save the DataFrame to PostgreSQL
-        table_name = "visualization_data"
-        success_message = f"Saved data to PostgreSQL table: {table_name}"
-        save_to_postgresql(
-            df,
-            table_name=table_name,
-            success_message=success_message,
-            if_exists="replace",
-        )
 
     def visualize_all(self, df=None, analysis_results=None):
         """
@@ -1123,7 +1385,6 @@ class Visualization:
         Returns:
             dict: Dictionary containing paths to all visualizations
         """
-
         try:
             # Load data if not provided
             if df is None or df.empty:
@@ -1199,21 +1460,47 @@ class Visualization:
                 )
                 supabase_paths["kohonen_map_hits"] = kohonen_path.get("supabase_url_hits")
 
-            # Save file URLs to the database
-            if self.save_to_supabase:
-                self.save_file_url_to_database(supabase_paths)
+            # 8. Summaries
+            if analysis_results and "summaries" in analysis_results:
+                summary_paths = self.visualize_summaries(analysis_results)
+                if summary_paths:
+                    visualization_paths.update(summary_paths)
 
-            # 8. Dashboard
+            # 9. Dashboard
             dashboard_path = self.create_dashboard(df, analysis_results)
             if dashboard_path:
                 visualization_paths["dashboard"] = dashboard_path
+
+            # Save file URLs to the database
+            if self.save_to_supabase:
+                self.save_file_url_to_database(supabase_paths)
 
             logger.info(f"Created {len(visualization_paths)} visualizations")
             return visualization_paths
 
         except Exception as e:
             print(e.with_traceback(None))
-            logger.error(f"Error creating visualizations {e}")
+            logger.error(f"Error creating visualizations: {e}")
+            return {}
+
+    @staticmethod
+    def save_file_url_to_database(file_dict: dict[str, str]):
+        """
+        Save the file URL to the database.
+        Args:
+            file_dict (dict): Dictionary containing file URLs
+        """
+        # create a DataFrame from the file_dict
+        df = pd.DataFrame(file_dict.items(), columns=["file_type", "file_url"])
+        # save the DataFrame to PostgreSQL
+        table_name = "visualization_data"
+        success_message = f"Saved data to PostgreSQL table: {table_name}"
+        save_to_postgresql(
+            df,
+            table_name=table_name,
+            success_message=success_message,
+            if_exists="replace",
+        )
 
 
 if __name__ == "__main__":

@@ -1,6 +1,8 @@
 import argparse
 import os
+import sys
 
+import pandas
 from loguru import logger
 
 # Import the four main modules
@@ -35,18 +37,21 @@ def parse_arguments():
         default=default_output_dir,
         help="Directory to store all output files",
     )
-    parser.add_argument(
-        "--skip-data-prep",
-        action="store_true",
-        help="Skip data preparation step (use existing processed data)",
+
+    # Add mutually exclusive group for skip/run options
+    skip_run_group = parser.add_mutually_exclusive_group()
+    skip_run_group.add_argument(
+        "--skip",
+        choices=["data-prep", "analysis", "vis", "story"],
+        nargs="+",
+        help="Steps to skip (can specify multiple steps)",
     )
-    parser.add_argument(
-        "--skip-analysis",
-        action="store_true",
-        help="Skip summarization and classification (use existing analysis results)",
+    skip_run_group.add_argument(
+        "--run",
+        choices=["data-prep", "analysis", "vis", "story"],
+        nargs="+",
+        help="Steps to run (can specify multiple steps)",
     )
-    parser.add_argument("--skip-visualization", action="store_true", help="Skip visualization step")
-    parser.add_argument("--skip-stories", action="store_true", help="Skip story development step")
 
     return parser.parse_args()
 
@@ -104,10 +109,10 @@ def run_data_preparation(dirs, skip=False):
         pandas.DataFrame: Processed email data
     """
 
+    # data_prep = DataPreparation(input_dir=dirs["data_dir"], output_dir=dirs["processed_data_dir"], skip=skip)
     data_prep = DataPreparation(input_dir=dirs["data_dir"], output_dir=dirs["processed_data_dir"])
     if skip:
         logger.info("Skipping data preparation step...")
-        # Try to load existing processed data
         try:
             df = data_prep.load_data()
             logger.info(f"Loaded processed data with {len(df)} emails")
@@ -123,12 +128,12 @@ def run_data_preparation(dirs, skip=False):
     return df
 
 
-def run_summarization_classification(_, dirs, skip=False):
+def run_summarization_classification(df, dirs, skip=False):
     """
     Run the summarization and classification step.
 
     Args:
-        _ (pandas.DataFrame): Unused input to match interface.
+        df (pandas.DataFrame): Processed email data.
         dirs (dict): Dictionary containing directory paths.
         skip (bool): Whether to skip this step.
 
@@ -137,18 +142,18 @@ def run_summarization_classification(_, dirs, skip=False):
     """
 
     analyzer = SummarizationClassification(
-        input_dir=dirs["processed_data_dir"], output_dir=dirs["analysis_results_dir"]
+        input_dir=dirs["processed_data_dir"], output_dir=dirs["analysis_results_dir"], skip=skip
     )
-
     if skip:
         logger.info("Skipping summarization and classification step...")
-        df = analyzer.load_data(skip=True)
-        analyzer.save_to_json(df)
+        df = analyzer.load_data()
         return df
-    logger.info("Running summarization and classification step...")
 
-    df = analyzer.analyze_emails()
+    logger.info("Running summarization and classification step...")
+    df, res = analyzer.analyze_emails(df=df)
+    analyzer.save_to_json(res, is_dataframe=False)
     # analyzer.save_to_json(df)
+    analyzer.save_to_pickle(df)
     logger.info(f"Processed {len(df)} emails")
     return df
 
@@ -233,17 +238,57 @@ def main():
     """
     Main function to run the entire pipeline.
     """
-    args = parse_arguments()
-    dirs = setup_directories(args)
+    try:
+        args = parse_arguments()
+        dirs = setup_directories(args)
 
-    # Run each step of the pipeline
-    df = run_data_preparation(dirs, args.skip_data_prep)
-    analysis_results = run_summarization_classification(df, dirs, args.skip_analysis)
-    visualization_paths = run_visualization(df, analysis_results, dirs, args.skip_visualization)
-    story_results = run_story_development(df, analysis_results, dirs, args.skip_stories)
-    # Generate a final report
-    report_path = generate_report(dirs, df, analysis_results, visualization_paths, story_results)
-    logger.info(f"Pipeline completed. Final report available at {report_path}")
+        # Determine which steps to run based on skip/run arguments
+        all_steps = ["data-prep", "analysis", "vis", "story"]
+        steps_to_run = []
+
+        if args.skip:
+            # If skip is specified, run all steps except those in skip
+            steps_to_run = [step for step in all_steps if step not in args.skip]
+        elif args.run:
+            # If run is specified, only run those steps
+            steps_to_run = args.run
+        else:
+            # If neither skip nor run is specified, run all steps
+            steps_to_run = all_steps
+
+        if steps_to_run == []:
+            logger.info("No steps to run. Exiting program...")
+            sys.exit(0)
+
+        logger.info(f"Running steps: {steps_to_run}")
+
+        # Run each step of the pipeline based on steps_to_run
+        df = None
+        analysis_results = None
+        visualization_paths = {}
+        story_results = {}
+
+        df = run_data_preparation(dirs, skip=("data-prep" not in steps_to_run))
+        analysis_results = run_summarization_classification(
+            df, dirs, skip=("analysis" not in steps_to_run)
+        )
+        visualization_paths = run_visualization(
+            df, analysis_results, dirs, skip=("vis" not in steps_to_run)
+        )
+        story_results = run_story_development(
+            df, analysis_results, dirs, skip=("story" not in steps_to_run)
+        )
+
+        # Generate a final report
+        report_path = generate_report(
+            dirs, df, analysis_results, visualization_paths, story_results
+        )
+        logger.info(f"Pipeline completed. Final report available at {report_path}")
+
+    except Exception as e:
+        logger.error(f"Error in main pipeline: {e}")
+        logger.info("Exiting program...")
+        sys.exit(0)
 
 
 if __name__ == "__main__":

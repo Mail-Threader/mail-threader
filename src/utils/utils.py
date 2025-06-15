@@ -5,6 +5,7 @@ Utility functions for the Enron Email Analysis Pipeline.
 import os
 from typing import Any, Callable, Dict, List, Optional, Union
 
+import nltk
 import pandas as pd
 from dotenv import load_dotenv
 from loguru import logger
@@ -13,6 +14,29 @@ from supabase import Client, create_client
 
 # Load environment variables from .env file
 load_dotenv()
+
+
+def initialize_nltk(resources: Optional[List[str]] = None) -> None:
+    """
+    Initialize NLTK resources. Downloads required NLTK data if not already present.
+
+    Args:
+        resources (List[str], optional): List of NLTK resources to download.
+            If None, downloads default resources: ['punkt', 'stopwords', 'wordnet'].
+
+    Raises:
+        Exception: If there's an error downloading NLTK resources.
+    """
+    if resources is None:
+        resources = ["punkt", "stopwords", "wordnet"]
+
+    try:
+        for resource in resources:
+            nltk.download(resource, quiet=True)
+        logger.info(f"Successfully initialized NLTK resources: {', '.join(resources)}")
+    except Exception as e:
+        logger.error(f"Error downloading NLTK resources: {e}")
+        raise Exception(f"Failed to initialize NLTK resources: {e}")
 
 
 def sample_function(a: int, b: int) -> int:
@@ -201,3 +225,65 @@ def upload_to_supabase(
     except Exception as e:
         logger.error(f"Error uploading file to Supabase: {e}")
         return None
+
+
+def load_processed_df(search_dir: str, search_file_name: str, db_table: str = None) -> pd.DataFrame:
+    """
+
+    Load the latest processed data file from the specified directory.
+
+    Args:
+        search_dir (str): Path to the directory containing the processed data files.
+        search_file_name (str): File name to search for.
+        db_table (str | None): None or Name of the database table to load data from.
+    """
+    pkl_files = [
+        f for f in os.listdir(search_dir) if f.startswith(search_file_name) and f.endswith(".pkl")
+    ]
+
+    json_files = [
+        f for f in os.listdir(search_dir) if f.startswith(search_file_name) and f.endswith(".json")
+    ]
+
+    if pkl_files:
+        pkl_files.sort(reverse=True)
+        file_path = os.path.join(search_dir, pkl_files[0])
+
+        try:
+            df = pd.read_pickle(file_path)
+            logger.info(f"Loaded data from {file_path}: {len(df)} emails")
+            return df
+        except Exception as e:
+            logger.error(f"Error loading data from {file_path}: {e}")
+            return pd.DataFrame()
+
+    if json_files:
+        json_files.sort(reverse=True)
+        file_path = os.path.join(search_dir, json_files[0])
+
+        try:
+            df = pd.read_json(file_path)
+            logger.info(f"Loaded data from {file_path}: {len(df)} emails")
+            return df
+        except Exception as e:
+            logger.error(f"Error loading data from {file_path}: {e}")
+            return pd.DataFrame()
+
+    if not pkl_files and not json_files:
+        logger.warning(f"No processed data files found in {search_dir}")
+
+        if db_table is None:
+            logger.warning("No database table specified. Skipping database load.")
+            return pd.DataFrame()
+
+        logger.warning("Fetching data from database...")
+
+        try:
+            engine = create_engine(os.environ.get("DATABASE_URL"))
+            df = pd.read_sql(f"SELECT * FROM {db_table}", engine)
+            logger.info(f"Loaded data from database: {len(df)} emails")
+            return df
+        except Exception as e:
+            logger.error(f"Error loading data from database: {e}")
+
+    return pd.DataFrame()

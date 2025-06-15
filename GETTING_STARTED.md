@@ -19,6 +19,7 @@ This guide will help new team members get up and running with the project quickl
 Before you begin, make sure you have the following installed:
 
 - Python 3.9 or higher
+- Node.js 18 or higher
 - Git
 
 ### Step 1: Clone the Repository
@@ -54,13 +55,25 @@ Activate the virtual environment:
 For regular users:
 
 ```bash
+# Install Python dependencies
 pip install -r requirements.txt
+
+# Install frontend dependencies
+cd frontend
+npm install
+cd ..
 ```
 
 For developers (includes development tools):
 
 ```bash
+# Install Python package with development dependencies
 pip install -e ".[dev]"
+
+# Install frontend dependencies
+cd frontend
+npm install
+cd ..
 ```
 
 ### Step 4: Install Pre-commit Hooks
@@ -75,35 +88,42 @@ pre-commit install
 
 The project is organized as follows:
 
-- `src/`: Contains all source code
-  - `main.py`: Main entry point for the pipeline
-  - `data_preparation/`: Module for loading and preprocessing email data
-    - `data_preparation.py`: Implementation of the DataPreparation class
-    - `__init__.py`: Exports the DataPreparation class
-  - `summarization_classification/`: Module for topic modeling, clustering, and analysis
-    - `summarization_classification.py`: Implementation of the SummarizationClassification class
-    - `__init__.py`: Exports the SummarizationClassification class
-  - `visualization/`: Module for creating visualizations
-    - `visualization.py`: Implementation of the Visualization class
-    - `__init__.py`: Exports the Visualization class
-  - `story_development/`: Module for generating narratives from the data
-    - `story_development.py`: Implementation of the StoryDevelopment class
-    - `__init__.py`: Exports the StoryDevelopment class
-  - `utils/`: Utility functions used across modules
-    - `utils.py`: Implementation of utility functions
-    - `__init__.py`: Exports utility functions
-  - `__init__.py`: Package initialization file
+### Backend (`src/`)
+
+- `main.py`: Main entry point for the pipeline
+- `data_preparation/`: Module for loading and preprocessing email data
+- `summarization_classification/`: Module for topic modeling, clustering, and analysis
+- `visualization/`: Module for creating visualizations
+- `story_development/`: Module for generating narratives from the data
+- `utils/`: Utility functions used across modules
+
+### Frontend (`frontend/`)
+
+- `app/`: Next.js app directory
+  - `page.tsx`: Main page component
+  - `layout.tsx`: Root layout component
+  - `api/`: API route handlers
+- `components/`: Reusable React components
+  - `ui/`: Basic UI components
+  - `features/`: Feature-specific components
+- `lib/`: Utility functions and API clients
+- `db/`: Database models and utilities
+- `public/`: Static assets
+- `styles/`: Global styles and CSS modules
+
+### Other Directories
+
 - `tests/`: Test files
   - `unit/`: Unit tests for individual components
   - `integration/`: Integration tests for module interactions
 - `data/`: Directory containing the Enron email dataset
-- `output/`: Directory where all results will be stored (created automatically)
+- `output/`: Directory where all results will be stored
+- `.github/`: GitHub Actions workflows and templates
 - `.vscode/`: VS Code configuration files
-- `.github/workflows/`: GitHub Actions CI/CD configuration
 
 ## Running the Application
 
-### Basic Usage
+### Backend
 
 The main entry point for the pipeline is `src/main.py`:
 
@@ -113,29 +133,29 @@ python src/main.py
 
 This will run the entire pipeline with default settings, using the data in the `data/` directory and storing results in the `output/` directory.
 
-### Command-line Arguments
-
-You can customize the execution with various command-line arguments:
+#### Command-line Arguments
 
 - `--data-dir`: Directory containing the email data files (default: `./data/`)
 - `--output-dir`: Directory to store all output files (default: `./output/`)
-- `--skip-data-prep`: Skip data preparation step (use existing processed data)
-- `--skip-analysis`: Skip summarization and classification step (use existing analysis results)
-- `--skip-visualization`: Skip visualization step
-- `--skip-stories`: Skip story development step
+- `--skip`: Steps to skip (can specify multiple steps)
+  - Available steps: `data-prep`, `analysis`, `vis`, `story`
+  - Example: `--skip data-prep analysis`
+- `--run`: Steps to run (can specify multiple steps)
+  - Available steps: `data-prep`, `analysis`, `vis`, `story`
+  - Example: `--run vis story`
 
-### Examples
+#### Examples
 
-Run only the data preparation step:
+Run only the visualization and story development steps:
 
 ```bash
-python src/main.py --skip-analysis --skip-visualization --skip-stories
+python src/main.py --run vis story
 ```
 
-Run visualization and story development using existing processed data and analysis results:
+Skip data preparation and analysis steps:
 
 ```bash
-python src/main.py --skip-data-prep --skip-analysis
+python src/main.py --skip data-prep analysis
 ```
 
 Use a different data directory:
@@ -144,20 +164,33 @@ Use a different data directory:
 python src/main.py --data-dir /path/to/enron/emails
 ```
 
-You can also run individual modules directly:
+### Frontend
+
+To run the frontend development server:
 
 ```bash
-python -m src.data_preparation.data_preparation
-python -m src.summarization_classification.summarization_classification
-python -m src.visualization.visualization
-python -m src.story_development.story_development
+cd frontend
+npm run dev
 ```
+
+This will start the Next.js development server at http://localhost:3000.
+
+#### Frontend Development
+
+- `npm run dev`: Start development server
+- `npm run build`: Build for production
+- `npm run start`: Start production server
+- `npm run lint`: Run ESLint
+- `npm run test`: Run tests
+- `npm run type-check`: Run TypeScript type checking
 
 ## Development Workflow
 
 ### Code Style and Formatting
 
 This project follows strict code style guidelines enforced by several tools:
+
+#### Backend
 
 1. **Black**: Code formatting
 2. **isort**: Import sorting
@@ -180,11 +213,24 @@ ruff check src tests
 mypy src
 ```
 
-Or use the Makefile commands (see [Using the Makefile](#using-the-makefile) section).
+#### Frontend
+
+1. **ESLint**: JavaScript/TypeScript linting
+2. **Prettier**: Code formatting
+3. **TypeScript**: Static type checking
+
+```bash
+cd frontend
+npm run lint
+npm run format
+npm run type-check
+```
 
 ### Writing Tests
 
-All new code should be accompanied by tests. We use pytest for testing:
+#### Backend Tests
+
+All new backend code should be accompanied by tests. We use pytest for testing:
 
 1. Create test files in the `tests/unit/` or `tests/integration/` directories
 2. Name test files with the prefix `test_`
@@ -202,9 +248,26 @@ Or with coverage:
 pytest --cov=src --cov-report=html
 ```
 
+#### Frontend Tests
+
+Frontend tests use Jest and React Testing Library:
+
+1. Create test files with `.test.tsx` or `.spec.tsx` extension
+2. Place test files next to the components they test
+3. Use React Testing Library for component testing
+
+Run the tests:
+
+```bash
+cd frontend
+npm test
+```
+
 ### Documentation
 
-We use Sphinx for documentation:
+#### Backend Documentation
+
+We use Sphinx for backend documentation:
 
 1. Add docstrings to your code using Google style
 2. Build the documentation:
@@ -214,91 +277,59 @@ We use Sphinx for documentation:
    ```
 3. View the documentation in `docs/build/html/index.html`
 
+#### Frontend Documentation
+
+The frontend uses Next.js documentation:
+
+1. Add JSDoc comments to your components and functions
+2. Use TypeScript types and interfaces for better documentation
+3. Add README.md files in component directories for complex components
+
 ## Using the Makefile
 
 The project includes a Makefile with several useful commands:
 
-- `make help`: Display help information about available commands
-- `make clean`: Remove build, test, coverage, and Python artifacts
-- `make lint`: Check code style with ruff, black, and isort
-- `make format`: Format code with black and isort
-- `make test`: Run tests with pytest
-- `make coverage`: Generate and view test coverage reports
-- `make docs`: Generate Sphinx HTML documentation
-- `make dist`: Build source and wheel package
-- `make install`: Install the package
-- `make dev-install`: Install the package in development mode
-
-Example usage:
-
 ```bash
-# Format code and run tests
-make format
-make test
-
-# Generate documentation
-make docs
+make help              # Display help information
+make clean            # Remove build artifacts
+make lint             # Check code style
+make format           # Format code
+make test             # Run tests
+make coverage         # Generate coverage reports
+make docs             # Generate documentation
+make dist             # Build package
+make install          # Install package
+make dev-install      # Install in development mode
 ```
 
 ## Debugging
 
 ### VS Code Debugging
 
-The project includes VS Code launch configurations for debugging:
+The project includes VS Code launch configurations for debugging both backend and frontend:
 
 1. Open the project in VS Code
 2. Go to the "Run and Debug" tab
-3. Select one of the available configurations:
-   - "Python: Current File": Debug the currently open file
-   - "Python: Main Module": Debug the main.py entry point
-   - "Python: Debug Tests": Debug test files
+3. Select the appropriate configuration:
+   - "Python: Current File" for backend debugging
+   - "Next.js: debug server-side" for frontend server debugging
+   - "Next.js: debug client-side" for frontend client debugging
 
-### Debugging from Command Line
+### Browser Developer Tools
 
-You can also use Python's built-in debugger:
+For frontend debugging:
 
-```bash
-python -m pdb src/main.py
-```
+1. Open Chrome DevTools (F12 or Cmd+Option+I)
+2. Use the React Developer Tools extension
+3. Use the Network tab to debug API calls
+4. Use the Console tab for JavaScript debugging
 
 ## Contributing Guidelines
 
-### Workflow
-
-1. Create a new branch for your feature or bug fix:
-
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-
-2. Make your changes and ensure they follow the code style guidelines
-
-3. Run the tests to make sure everything works:
-
-   ```bash
-   make test
-   ```
-
-4. Commit your changes with a descriptive message:
-
-   ```bash
-   git commit -m "Add feature: your feature description"
-   ```
-
-5. Push your branch to the remote repository:
-
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-
-6. Create a pull request on GitHub
-
-### Code Review Process
-
-All submissions will be reviewed by the project maintainers:
-
-1. Automated checks must pass (linting, tests, etc.)
-2. At least one maintainer must approve the changes
-3. Changes should be rebased on the latest main branch before merging
+1. Create a new branch for your feature or bugfix
+2. Follow the code style guidelines
+3. Write tests for new code
+4. Update documentation
+5. Submit a pull request
 
 For more details, see the [Contributing Guide](docs/source/contributing.rst).
