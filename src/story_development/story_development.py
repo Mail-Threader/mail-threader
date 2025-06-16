@@ -118,7 +118,7 @@ class StoryDevelopment:
         except Exception as e:
             raise FileOperationError(f"Failed to initialize StoryDevelopment: {e}")
 
-    def load_data(self, file_path=None):
+    def load_data(self, file_path: str = None):
         """
         Load processed email data from a file.
 
@@ -696,7 +696,8 @@ class StoryDevelopment:
                 if similarity > 0.7:  # Threshold for topic similarity
                     G.add_edge(i, j, type="topic", similarity=float(similarity))
 
-    def _process_temporal_connections(self, df: pd.DataFrame, G: nx.Graph) -> None:
+    @staticmethod
+    def _process_temporal_connections(df: pd.DataFrame, G: nx.Graph) -> None:
         """Process temporal-based connections in parallel."""
         logger.info("Connecting emails by temporal proximity...")
         df["date"] = pd.to_datetime(df["date"])
@@ -706,7 +707,8 @@ class StoryDevelopment:
                 if time_diff < 3600:  # Within 1 hour
                     G.add_edge(i, j, type="temporal", time_diff=float(time_diff))
 
-    def _process_content_connections(self, tfidf_matrix: Any, G: nx.Graph) -> None:
+    @staticmethod
+    def _process_content_connections(tfidf_matrix: Any, G: nx.Graph) -> None:
         """Process content-based connections in parallel."""
         logger.info("Connecting emails by content similarity...")
         # Convert sparse matrix to dense for easier processing
@@ -1283,7 +1285,8 @@ class StoryDevelopment:
                 raise
             raise FileOperationError(f"Unexpected error saving stories: {e}")
 
-    def _generate_html_report(self, stories):
+    @staticmethod
+    def _generate_html_report(stories):
         """Generate a simple HTML report from the stories."""
         html = """
         <!DOCTYPE html>
@@ -1809,8 +1812,8 @@ class StoryDevelopment:
 
         return stories
 
+    @staticmethod
     def _generate_actor_summary(
-        self,
         actor,
         metrics,
         common_words,
@@ -1902,8 +1905,8 @@ class StoryDevelopment:
 
         return summary
 
+    @staticmethod
     def _generate_event_summary(
-        self,
         date,
         email_count,
         deviation,
@@ -1970,8 +1973,8 @@ class StoryDevelopment:
 
         return summary
 
+    @staticmethod
     def _generate_thread_summary(
-        self,
         subject,
         num_emails,
         num_participants,
@@ -2039,8 +2042,8 @@ class StoryDevelopment:
 
         return summary
 
+    @staticmethod
     def _generate_topic_summary(
-        self,
         topic_id,
         keywords,
         topic_trend,
@@ -2111,7 +2114,8 @@ class StoryDevelopment:
 
         return summary
 
-    def _analyze_topic_trend(self, topic_counts, topic_num):
+    @staticmethod
+    def _analyze_topic_trend(topic_counts, topic_num):
         """Analyze the trend of a topic over time."""
         if not topic_counts:
             return {"trend": "unknown", "peak_period": None, "peak_count": 0}

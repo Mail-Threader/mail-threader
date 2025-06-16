@@ -122,8 +122,8 @@ def run_data_preparation(dirs, skip=False):
 
     logger.info("Running data preparation step...")
     df = data_prep.process_all_emails()
-    # data_prep.save_to_pickle(df)
-    # data_prep.save_to_json(df)
+    data_prep.save_to_pickle(df)
+    data_prep.save_to_json(df)
     logger.info(f"Processed {len(df)} emails")
     return df
 
@@ -142,7 +142,9 @@ def run_summarization_classification(df, dirs, skip=False):
     """
 
     analyzer = SummarizationClassification(
-        input_dir=dirs["processed_data_dir"], output_dir=dirs["analysis_results_dir"], skip=skip
+        input_dir=dirs["processed_data_dir"],
+        output_dir=dirs["analysis_results_dir"],
+        skip=skip,
     )
     if skip:
         logger.info("Skipping summarization and classification step...")
@@ -152,7 +154,7 @@ def run_summarization_classification(df, dirs, skip=False):
     logger.info("Running summarization and classification step...")
     df, res = analyzer.analyze_emails(df=df)
     analyzer.save_to_json(res, is_dataframe=False)
-    # analyzer.save_to_json(df)
+    analyzer.save_to_json(df)
     analyzer.save_to_pickle(df)
     logger.info(f"Processed {len(df)} emails")
     return df

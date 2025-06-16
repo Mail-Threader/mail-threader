@@ -207,11 +207,72 @@ class SummarizationClassification:
                 except Exception as e:
                     logger.error(f"Error downloading NLTK package {package}: {e}")
 
+            # Enron-specific stopwords
+            self.custom_stop_words = set(
+                [
+                    "enron",
+                    "ect",
+                    "houston",
+                    "corp",
+                    "com",
+                    "recipient",
+                    "subject",
+                    "email",
+                    "message",
+                    "cc",
+                    "to",
+                    "from",
+                    "sent",
+                    "pm",
+                    "am",
+                    "forwarded",
+                    "original",
+                    "attached",
+                    "http",
+                    "https",
+                    "www",
+                    "allen",
+                    "louise",
+                    "vince",
+                    "taylor",
+                    "kaminski",
+                    "jeff",
+                    "kean",
+                    "delainey",
+                    "buy",
+                    "power",
+                    "gas",
+                    "energy",
+                    "deal",
+                    "trading",
+                    "enron.com",
+                    "enron.net",
+                    "enronxgate",
+                    "e-mail",
+                    "mail",
+                    "contact",
+                    "address",
+                    "phone",
+                    "fax",
+                    "please",
+                    "thanks",
+                    "regards",
+                    "attached",
+                    "forward",
+                    "re",
+                    "fw",
+                    "fwd",
+                ]
+            )
+
             # Verify downloads and initialize components
             try:
                 # Initialize components first
                 self.stop_words = set(stopwords.words("english"))
                 self.lemmatizer = WordNetLemmatizer()
+
+                # Merge with custom stopwords
+                self.stop_words = self.stop_words.union(self.custom_stop_words)
 
                 # Simple verification of components
                 if not self.stop_words:
@@ -1272,7 +1333,7 @@ class SummarizationClassification:
                 df = self.load_data()
                 if df.empty:
                     logger.error("No data available for analysis")
-                    return None, None
+                    return pd.DataFrame(), None
 
             logger.info(
                 f"Analyzing emails with optimized batch processing (batch size: {batch_size}) on {df.shape} items"

@@ -1062,8 +1062,6 @@ class DataPreparation:
         start_time = time.time()
         total_files = sum(len(files) for _, _, files in os.walk(self.input_dir))
 
-        i = 0
-
         print(f"📂 Looking for files in: {os.path.abspath(self.input_dir)}")
         with tqdm(total=total_files, desc="📬 Processing emails") as pbar:
             for root, dirs, files in os.walk(self.input_dir):
@@ -1071,9 +1069,6 @@ class DataPreparation:
                     file_path = os.path.join(root, filename)
                     if os.path.isfile(file_path):
                         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                            if i == 50:
-                                break
-                            i += 1
                             raw_text = f.read()
                             email_data = self.extract_all_emails(raw_text)
                             for email in email_data:
