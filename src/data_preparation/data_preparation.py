@@ -1,4 +1,3 @@
-# from loguru import logger
 import json
 import os
 import re
@@ -10,6 +9,8 @@ import pickle
 from datetime import datetime
 from cleantext.sklearn import CleanTransformer
 from cleantext import clean
+import string
+from itertools import groupby
 
 
 class DataPreparation:
@@ -38,7 +39,7 @@ class DataPreparation:
 
     def normalize_dates(self, text):
         if text is None:
-            return None
+            return ""
         cleaned_text = re.sub(r"\s*\([A-Z]{2,}\)$", "", text.strip())
         parsed_date = dateparser.parse(cleaned_text)
         if parsed_date:
@@ -50,7 +51,9 @@ class DataPreparation:
         """Splits raw email into headers and body."""  # docstring
         parts = email_text.split("\n\n", 1)
         headers = parts[0]
+
         body = parts[1] if len(parts) > 1 else ""
+        # adddd: if see original message or forward message ... split and dont save as body
         return headers, body
 
     def parse_headers_org(self, header_text, main_id):
@@ -71,18 +74,17 @@ class DataPreparation:
             if not line:  # Skip empty lines
                 continue
             if line.startswith("From:"):
-                fields["from"].add(line.split(":", 1)[1].strip())
+                fields["from"] = line.split(":", 1)[1].strip()
             elif line.startswith("Sent:"):
                 date_text = line.split(":", 1)[1].strip()
                 normalized_date = self.normalize_dates(date_text)
-                fields["date"].add(normalized_date)
-
+                fields["date"] = normalized_date
             elif line.startswith("To:") and not fields["to"]:  # First "To:"
-                fields["to"].add(line.split(":", 1)[1].strip())
+                fields["to"] = line.split(":", 1)[1].strip()
             elif line.startswith("Cc:"):
-                fields["cc"].add(line.split(":", 1)[1].strip())
+                fields["cc"] = line.split(":", 1)[1].strip()
             elif line.startswith("Subject:"):
-                fields["subject"].add(line.split(":", 1)[1].strip())
+                fields["subject"] = line.split(":", 1)[1].strip()
 
         return fields
 
@@ -102,24 +104,93 @@ class DataPreparation:
 
         for line in header_text.split("\n"):
             if line.startswith("Message-ID:"):
-                fields["message_id"].add(line.split(":", 1)[1].strip())
+                fields["message_id"] = line.split(":", 1)[1].strip()
             elif line.startswith("Date:"):
                 date_main = line.split(":", 1)[1].strip()
-                fields["date"].add(self.normalize_dates(date_main))
+                fields["date"] = self.normalize_dates(date_main)
             elif line.startswith("From:"):
-                fields["from"].add(line.split(":", 1)[1].strip())
+                fields["from"] = line.split(":", 1)[1].strip()
             elif line.startswith("To:"):
-                fields["to"].add(line.split(":", 1)[1].strip())
+                fields["to"] = line.split(":", 1)[1].strip()
             elif line.startswith("Subject:"):
-                fields["subject"].add(line.split(":", 1)[1].strip())
+                fields["subject"] = line.split(":", 1)[1].strip()
             elif line.startswith("X-From:"):
-                fields["X-From"].add(line.split(":", 1)[1].strip())
+                fields["X-From"] = line.split(":", 1)[1].strip()
             elif line.startswith("X-To:"):
-                fields["X-To"].add(line.split(":", 1)[1].strip())
+                fields["X-To"] = line.split(":", 1)[1].strip()
             elif line.startswith("X-cc:"):
-                fields["X-cc"].add(line.split(":", 1)[1].strip())
+                fields["X-cc"] = line.split(":", 1)[1].strip()
 
         return fields
+
+    def parse_original_block(self, original_block):
+        """Parses a single forwarded message block and extracts headers from the body."""
+        org_data = {
+            "date": set(),
+            "from": set(),
+            "original_sender": set(),
+            "original_Date": set(),
+            "to": set(),
+            "cc": set(),
+            "subject": set(),
+            "body": set(),
+        }
+        body_lines = []
+        header_found = False
+
+        # Extract information about the forwarder
+        original_info = re.split(
+            r"^-{2,}\s*Original Message\s*-{2,}$", original_block, flags=re.MULTILINE
+        )
+
+        # if original_info:
+        #     org_data["date"].add(original_info.group(2).replace("\n", " ").strip())
+        #     org_data["from"].add(original_info.group(1).strip())
+        #  else:
+        # fwd_data["from"] = "can not find"
+
+        # Extract original sender info (original sender and date)
+        sender_info = re.search(
+            r"(.+(?:<.+?>)?)\s*\n\s*(\d{2}[-/]\d{2}[-/](?:\d{2}|\d{4}) \d{1,2}:\d{2}(?: [AP]M)?)",
+            original_block,
+        )
+        if sender_info:
+            org_data["original_sender"].add(sender_info.group(1).strip())
+            org_data["original_Date"].add(sender_info.group(2).strip())
+        else:
+            org_data["original_sender"].add("can not find")
+
+        # Extract recipient (To)
+        to_info = re.search(r"To:\s*(.+)", original_block)
+        org_data["to"].add(to_info.group(1).strip() if to_info else "")
+
+        # Extract To and Cc blocks and email addresses
+        to_match = re.search(
+            r"To:(.*?)(\n\s*\n|Cc:|Subject:)", original_block, re.DOTALL | re.IGNORECASE
+        )
+        cc_match = re.search(
+            r"Cc:(.*?)(\n\s*\n|Subject:)", original_block, re.DOTALL | re.IGNORECASE
+        )
+
+        # Extract email addresses
+        to_block = to_match.group(1).strip() if to_match else ""
+        cc_block = cc_match.group(1).strip() if cc_match else ""
+
+        emails_to = re.findall(r"[\w\.-]+@[\w\.-]+", to_block)
+        emails_cc = re.findall(r"[\w\.-]+@[\w\.-]+", cc_block)
+
+        org_data["to"].update(emails_to)
+        org_data["cc"].update(emails_cc)
+
+        # Extract subject
+        subject_info = re.search(r"Subject:\s*(.+)", original_block)
+        org_data["subject"].add(subject_info.group(1).strip()) if subject_info else None
+
+        # Extract message body after the subject
+        # message_match = re.search(r"Subject:.*?\n\n(.*)", original_block, re.DOTALL)
+        # org_data["body"].add(message_match.group(1).strip()) if message_match else None
+
+        return org_data
 
     def parse_forwarded_block(self, forward_block):
         """Parses a single forwarded message block and extracts headers from the body."""
@@ -193,6 +264,30 @@ class DataPreparation:
     def clean_body(self, body):
         """Clean body text (remove reply chains, extra spaces, etc)."""
 
+        result = []
+        for char, group in groupby(body):
+            if char in string.punctuation:
+                result.append(char)
+            else:
+                result.extend(group)
+        body = "".join(result)
+
+        if not re.search(r"[a-zA-Z]", body):
+            body = ""
+
+        body = clean(
+            body,
+            fix_unicode=True,  # fix various unicode errors
+            to_ascii=True,  # transliterate to closest ASCII representation
+            lower=True,  # lowercase text
+            no_line_breaks=True,  # fully strip line breaks as opposed to only normalizing them
+            no_currency_symbols=True,  # replace all currency symbols with a special token
+            # no_punct=True,  # remove punctuations
+            # replace_with_punct=" ",  # instead of removing punctuations you may replace them
+            replace_with_currency_symbol="<CUR>",
+            lang="en",  # set to 'de' for German special handling
+        )
+
         # Remove lines starting with "to:", "cc:", "subject:", etc.
         body = re.sub(
             r"^(to:|cc:|subject:|from:|copy:|re:).*\n?",
@@ -215,39 +310,19 @@ class DataPreparation:
         # Remove extra spaces at the start and end
         body = body.strip()
 
-        clean(
-            body,
-            fix_unicode=True,  # fix various unicode errors
-            to_ascii=True,  # transliterate to closest ASCII representation
-            lower=True,  # lowercase text
-            no_line_breaks=True,  # fully strip line breaks as opposed to only normalizing them
-            no_urls=False,  # replace all URLs with a special token
-            no_emails=False,  # replace all email addresses with a special token
-            no_phone_numbers=False,  # replace all phone numbers with a special token
-            no_numbers=False,  # replace all numbers with a special token
-            no_digits=False,  # replace all digits with a special token
-            no_currency_symbols=False,  # replace all currency symbols with a special token
-            no_punct=False,  # remove punctuations
-            replace_with_punct="",  # instead of removing punctuations you may replace them
-            replace_with_url="<URL>",
-            replace_with_email="<EMAIL>",
-            replace_with_phone_number="<PHONE>",
-            replace_with_number="<NUMBER>",
-            replace_with_digit="0",
-            replace_with_currency_symbol="<CUR>",
-            lang="en",  # set to 'de' for German special handling
-        )
-
         return body
 
-    def split_all_messages(self, email_text):
-        """Split main message and all forwarded and original messages (preserve markers)."""
+    def split_all_messages(self, email_text: str):
+        """
+        Split main message and all forwarded and original messages (preserve markers).
+        """
         # regex for forwarded and originals
         forward_pattern = re.compile(
-            r"^[-]+\s*Forwarded by.*", re.MULTILINE | re.IGNORECASE
+            r"-{2,}\s*Forwarded by\s+.*?-{2,}", re.DOTALL | re.MULTILINE | re.IGNORECASE
         )
+
         original_pattern = re.compile(
-            r"^\s*[-]+\s*Original Message.*", re.MULTILINE | re.IGNORECASE
+            r".*[-]+\s*Original Message\s*-+.*", re.MULTILINE | re.IGNORECASE
         )
 
         forward_matches = list(
@@ -262,20 +337,31 @@ class DataPreparation:
         main_text = email_text
 
         if forward_matches:
-            # msin text before first forwards
             main_text = email_text[: forward_matches[0].start()]
             for i in range(len(forward_matches)):
                 start = forward_matches[i].start()
-                end = (
+                next_forward_start = (
                     forward_matches[i + 1].start()
                     if i + 1 < len(forward_matches)
-                    else len(email_text)
+                    else None
                 )
-                forward_parts.append(email_text[start:end])
+                next_original_start = None
+                for orig_match in original_matches:
+                    if orig_match.start() > start:
+                        next_original_start = orig_match.start()
+                        break
+                    candidates = [
+                        pos
+                        for pos in [next_forward_start, next_original_start]
+                        if pos is not None
+                    ]
+                    end = min(candidates) if candidates else len(email_text)
+
+                    forward_parts.append(email_text[start:end])
 
         if original_matches:
             # main text before first original
-            main_text = email_text[: original_matches[0].start()]
+            main_text = main_text[: original_matches[0].start()]
             for i in range(len(original_matches)):
                 start = original_matches[i].start()
                 end = (
@@ -303,17 +389,47 @@ class DataPreparation:
         # original
         for org_text in original_parts:
             header_part_original, body_original = self.split_headers_body(org_text)
-            main_id = next(iter(main_data["message_id"]))
+            main_id = main_data["message_id"]
             original_data = self.parse_headers_org(header_part_original, main_id)
+            original_data["message_id"] = f"{main_data['message_id']}_original"
             original_data["body"] = self.clean_body(body_original)
             original_data["type"] = "original"
             extracted_emails.append(original_data)
 
+        # original emails
+        # for org_text in original_parts:
+        #     org_data1 = {
+        #         "message_id": next(iter(main_data["message_id"])) + "original",
+        #         "original_message_id": main_data["message_id"],
+        #         "filename": None,
+        #         "type": "originals",
+        #         "date": None,
+        #         "from": None,
+        #         "original_sender": None,
+        #         "original_Date": None,
+        #         "to": None,
+        #         "subject": None,
+        #         "cc": None,
+        #         "body": None,
+        #     }
+        #     parsed_org = self.parse_original_block(org_text)
+        #     org_data1["date"] = self.normalize_dates(
+        #         next(iter(parsed_org.get("date", [])), None)
+        #     )
+        #     org_data1["from"] = parsed_org.get("from")
+        #     org_data1["original_sender"] = parsed_org.get("original_sender")
+        #     org_data1["original_Date"] = parsed_org.get("original_Date")
+        #     org_data1["to"] = parsed_org.get("to")
+        #     org_data1["cc"] = parsed_org.get("cc")
+        #     org_data1["subject"] = parsed_org.get("subject")
+        #     org_data1["body"] = self.clean_body(parsed_org.get("body"))
+        #     extracted_emails.append(org_data1)
+
         # Forwarded emails
         for fwd_text in forwards_raw:
             fwd_data1 = {
-                "message_id": next(iter(main_data["message_id"])) + "forwarded",
-                "original_message_id": main_data["message_id"],
+                "message_id": f"{main_data['message_id']}_forwarded",
+                "main_id": main_data["message_id"],
                 "filename": None,
                 "type": "forwarded",
                 "date": None,
@@ -335,7 +451,7 @@ class DataPreparation:
             fwd_data1["to"] = parsed_fwd.get("to")
             fwd_data1["cc"] = parsed_fwd.get("cc")
             fwd_data1["subject"] = parsed_fwd.get("subject")
-            fwd_data1["body"] = parsed_fwd.get("body")
+            fwd_data1["body"] = self.clean_body(parsed_fwd.get("body"))
             extracted_emails.append(fwd_data1)
 
         return extracted_emails
@@ -344,7 +460,6 @@ class DataPreparation:
         """Reads and processes all email files in the given folder and shows progress with stats."""
         data = {
             "message_id": [],
-            "original_message_id": [],
             "main_id": [],
             "filename": [],
             "type": [],
@@ -366,7 +481,7 @@ class DataPreparation:
         total_emails = 0
         start_time = time.time()
         total_files = sum(len(files) for _, _, files in os.walk(self.input_dir))
-        print(f"📂 Looking for files in: {os.path.abspath(self.input_dir)}")
+        print(f"📂 Looking for files in: {os.path.join(self.input_dir)}")
 
         with tqdm(total=total_files, desc="📬 Processing emails") as pbar:
             for root, dirs, files in os.walk(self.input_dir):
@@ -426,6 +541,11 @@ class DataPreparation:
         print(f"⏱️ Time elapsed: {elapsed:.2f} seconds")
 
         df = pd.DataFrame(data)
+        # duplicate_rows_mask = df.duplicated(keep=False)
+        # all_duplicate_rows = df[duplicate_rows_mask]
+        # print(len(all_duplicate_rows))
+        df = df.drop_duplicates()
+
         return df
 
     def save_to_json(self, df):
