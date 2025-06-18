@@ -9,13 +9,9 @@ from typing import Any, Callable, Dict, List, Optional, Union
 import nltk
 import numpy as np
 import pandas as pd
-from dotenv import load_dotenv
 from loguru import logger
 from sqlalchemy import create_engine
 from supabase import Client, create_client
-
-# Load environment variables from .env file
-load_dotenv()
 
 
 def initialize_nltk(resources: Optional[List[str]] = None) -> None:
@@ -82,84 +78,6 @@ def filter_list(items: List[Any], condition: Callable) -> List[Any]:
         Filtered list containing only items where condition(item) is True
     """
     return [item for item in items if condition(item)]
-
-
-def save_to_postgresql(
-    df: pd.DataFrame,
-    db_url: Optional[str] = None,
-    table_name: str = "emails",
-    if_exists: str = "replace",
-    success_message: Optional[str] = None,
-) -> None:
-    """
-    Save a DataFrame to a PostgreSQL database.
-
-    Args:
-        df: DataFrame to save
-        db_url: Database connection URL (if None, will use environment variable DATABASE_URL)
-        table_name: Name of the table to create/replace
-        if_exists: How to behave if the table already exists ('fail', 'replace', or 'append')
-        success_message: Custom success message (if None, will use a default message)
-    """
-    try:
-        # Make a copy to avoid modifying the original DataFrame
-        df_copy = df.copy()
-
-        # Convert complex data types to strings for PostgreSQL compatibility
-        for col in df_copy.columns:
-            if df_copy[col].apply(lambda x: isinstance(x, (list, dict))).any():
-                df_copy[col] = df_copy[col].apply(
-                    lambda x: str(x) if isinstance(x, (list, dict)) else x
-                )
-
-        # Get database URL from environment variables if not provided
-        if db_url is None:
-            # First try to get the complete DATABASE_URL
-
-            logger.info("Trying to get database URL from environment variable DATABASE_URL")
-
-            db_url = os.environ.get("DATABASE_URL")
-
-            # If DATABASE_URL is not set, try to construct it from individual environment variables
-            if not db_url:
-                pg_host = os.environ.get("PG_HOST")
-                pg_port = os.environ.get("PG_PORT", "5432")
-                pg_user = os.environ.get("PG_USER")
-                pg_password = os.environ.get("PG_PASSWORD")
-                pg_database = os.environ.get("PG_DATABASE")
-
-                # Check if all required parameters are available
-                if pg_host and pg_user and pg_password and pg_database:
-                    db_url = (
-                        f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_database}"
-                    )
-                    logger.info(f"Constructed database URL from environment variables")
-                else:
-                    logger.error(
-                        "No database URL provided and environment variables for connection are not properly set"
-                    )
-                    return
-
-        # Create SQLAlchemy engine
-        engine = create_engine(db_url)
-
-        # Save DataFrame to PostgreSQL
-        df_copy.to_sql(
-            table_name,
-            engine,
-            if_exists=if_exists,
-            index=False,
-            method="multi",  # Use multi-row insert for better performance
-            chunksize=1000,  # Insert in chunks to avoid memory issues
-        )
-
-        # Log success message
-        if success_message:
-            logger.info(success_message)
-        else:
-            logger.info(f"Saved {len(df)} rows to PostgreSQL table: {table_name}")
-    except Exception as e:
-        logger.error(f"Error saving to PostgreSQL: {e}")
 
 
 def upload_to_supabase(
@@ -229,7 +147,9 @@ def upload_to_supabase(
         return None
 
 
-def load_processed_df(search_dir: str, search_file_name: str, db_table: str = None) -> pd.DataFrame:
+def load_processed_df(
+    search_dir: str, search_file_name: str, db_table: str = None, limit: int = None
+) -> pd.DataFrame:
     """
 
     Load the latest processed data file from the specified directory.
@@ -253,6 +173,7 @@ def load_processed_df(search_dir: str, search_file_name: str, db_table: str = No
 
         try:
             df = pd.read_pickle(file_path)
+            df = df.head(limit) if limit else df
             logger.info(f"Loaded data from {file_path}: {len(df)} emails")
             return df
         except Exception as e:
@@ -265,6 +186,7 @@ def load_processed_df(search_dir: str, search_file_name: str, db_table: str = No
 
         try:
             df = pd.read_json(file_path)
+            df = df.head(limit) if limit else df
             logger.info(f"Loaded data from {file_path}: {len(df)} emails")
             return df
         except Exception as e:

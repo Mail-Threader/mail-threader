@@ -1,15 +1,10 @@
 import argparse
 import os
-import sys
 
-import pandas
+from dotenv import load_dotenv
 from loguru import logger
 
-# Import the four main modules
-from data_preparation import DataPreparation
-from story_development import StoryDevelopment
-from summarization_classification import SummarizationClassification
-from visualization import Visualization
+from utils import DatabaseManager, initialize_nltk
 
 default_data_dir = os.path.join(os.getcwd(), "data")
 default_output_dir = os.path.join(os.getcwd(), "output")
@@ -51,6 +46,20 @@ def parse_arguments():
         choices=["data-prep", "analysis", "vis", "story"],
         nargs="+",
         help="Steps to run (can specify multiple steps)",
+    )
+
+    # Add database initialization option
+    parser.add_argument(
+        "--reset-db",
+        action="store_true",
+        help="Reset the database",
+    )
+
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Limit the number of emails to process",
     )
 
     return parser.parse_args()
@@ -97,38 +106,42 @@ def setup_directories(args):
     }
 
 
-def run_data_preparation(dirs, skip=False):
+def run_data_preparation(dirs, db: DatabaseManager, skip=False, limit: int = None):
     """
     Run the data preparation step.
 
     Args:
         dirs (dict): Dictionary containing directory paths
+        db (DatabaseManager): Database manager
         skip (bool): Whether to skip this step
+        limit (int): Limit the number of emails to process. If None, process all emails.
 
     Returns:
         pandas.DataFrame: Processed email data
     """
 
-    # data_prep = DataPreparation(input_dir=dirs["data_dir"], output_dir=dirs["processed_data_dir"], skip=skip)
+    from data_preparation import DataPreparation
+
     data_prep = DataPreparation(input_dir=dirs["data_dir"], output_dir=dirs["processed_data_dir"])
     if skip:
         logger.info("Skipping data preparation step...")
         try:
-            df = data_prep.load_data()
+            df = data_prep.load_data(limit=limit)
             logger.info(f"Loaded processed data with {len(df)} emails")
             return df
         except FileNotFoundError:
             logger.warning("No processed data found. Running data preparation step...")
 
     logger.info("Running data preparation step...")
-    df = data_prep.process_all_emails()
+    df = data_prep.process_all_emails(limit=limit)
     data_prep.save_to_pickle(df)
     data_prep.save_to_json(df)
-    logger.info(f"Processed {len(df)} emails")
+    db_res = data_prep.save_to_db(df, db)
+    logger.info(f"Processed {len(df)} emails and saved to database: {db_res}")
     return df
 
 
-def run_summarization_classification(df, dirs, skip=False):
+def run_summarization_classification(df, dirs, skip=False, limit: int = None):
     """
     Run the summarization and classification step.
 
@@ -140,11 +153,13 @@ def run_summarization_classification(df, dirs, skip=False):
     Returns:
         dict: Dictionary containing analysis results.
     """
+    from summarization_classification import SummarizationClassification
 
     analyzer = SummarizationClassification(
         input_dir=dirs["processed_data_dir"],
         output_dir=dirs["analysis_results_dir"],
         skip=skip,
+        save_to_db=True,
     )
     if skip:
         logger.info("Skipping summarization and classification step...")
@@ -157,7 +172,7 @@ def run_summarization_classification(df, dirs, skip=False):
     analyzer.save_to_json(df)
     analyzer.save_to_pickle(df)
     logger.info(f"Processed {len(df)} emails")
-    return df
+    return df, res
 
 
 def run_visualization(df, analysis_results, dirs, skip=False):
@@ -178,6 +193,8 @@ def run_visualization(df, analysis_results, dirs, skip=False):
         return {}
 
     logger.info("Running visualization step...")
+    from visualization import Visualization
+
     visualizer = Visualization(
         input_dir=dirs["processed_data_dir"],
         analysis_dir=dirs["analysis_results_dir"],
@@ -205,6 +222,8 @@ def run_story_development(df, analysis_results, dirs, skip=False):
         return {}
 
     logger.info("Running story development step...")
+    from story_development import StoryDevelopment
+
     story_developer = StoryDevelopment(
         input_dir=dirs["processed_data_dir"],
         analysis_dir=dirs["analysis_results_dir"],
@@ -215,82 +234,51 @@ def run_story_development(df, analysis_results, dirs, skip=False):
     return stories
 
 
-def generate_report(dirs, data_results, analysis_results, visualization_paths, story_results):
-    """
-    Generate a final HTML report.
-
-    Args:
-        dirs (dict): Dictionary containing directory paths
-        data_results (pandas.DataFrame): Processed email data
-        analysis_results (dict): Analysis results
-        visualization_paths (dict): Paths to generated visualizations
-        story_results (dict): Generated stories
-
-    Returns:
-        str: Path to the generated report
-    """
-    logger.info("Generating final report...")
-    report_path = os.path.join(dirs["output_dir"], "report.html")
-
-    logger.info(f"Report generated at {report_path}")
-    return report_path
-
-
 def main():
     """
-    Main function to run the entire pipeline.
+    Main function to run the email analysis pipeline.
     """
-    try:
-        args = parse_arguments()
-        dirs = setup_directories(args)
+    # Parse command line arguments
+    args = parse_arguments()
 
-        # Determine which steps to run based on skip/run arguments
-        all_steps = ["data-prep", "analysis", "vis", "story"]
-        steps_to_run = []
+    # Load environment variables from .env file
+    load_dotenv()
 
-        if args.skip:
-            # If skip is specified, run all steps except those in skip
-            steps_to_run = [step for step in all_steps if step not in args.skip]
-        elif args.run:
-            # If run is specified, only run those steps
-            steps_to_run = args.run
-        else:
-            # If neither skip nor run is specified, run all steps
-            steps_to_run = all_steps
+    # Initialize database
+    logger.info("Initializing database...")
+    db = DatabaseManager()
 
-        if steps_to_run == []:
-            logger.info("No steps to run. Exiting program...")
-            sys.exit(0)
+    # Initializing NLTK
+    initialize_nltk()
 
-        logger.info(f"Running steps: {steps_to_run}")
+    if args.reset_db:
+        db.reset_db()
 
-        # Run each step of the pipeline based on steps_to_run
-        df = None
-        analysis_results = None
-        visualization_paths = {}
-        story_results = {}
+    # Set up the directory structure
+    dirs = setup_directories(args)
 
-        df = run_data_preparation(dirs, skip=("data-prep" not in steps_to_run))
-        analysis_results = run_summarization_classification(
-            df, dirs, skip=("analysis" not in steps_to_run)
-        )
-        visualization_paths = run_visualization(
-            df, analysis_results, dirs, skip=("vis" not in steps_to_run)
-        )
-        story_results = run_story_development(
-            df, analysis_results, dirs, skip=("story" not in steps_to_run)
-        )
+    # Determine which steps to run
+    steps_to_run = ["data-prep", "analysis", "vis", "story"]
+    if args.run:
+        steps_to_run = args.run
+    elif args.skip:
+        steps_to_run = [step for step in steps_to_run if step not in args.skip]
 
-        # Generate a final report
-        report_path = generate_report(
-            dirs, df, analysis_results, visualization_paths, story_results
-        )
-        logger.info(f"Pipeline completed. Final report available at {report_path}")
+    logger.info(f"Running steps: {steps_to_run}")
 
-    except Exception as e:
-        logger.error(f"Error in main pipeline: {e}")
-        logger.info("Exiting program...")
-        sys.exit(0)
+    limit = args.limit
+
+    df = run_data_preparation(dirs, skip=("data-prep" not in steps_to_run), limit=limit, db=db)
+    processed_df = df
+    df, analysis_results = run_summarization_classification(
+        df, dirs, skip=("analysis" not in steps_to_run), limit=limit
+    )
+    visualization_paths = run_visualization(
+        processed_df, analysis_results, dirs, skip=("vis" not in steps_to_run)
+    )
+    story_results = run_story_development(
+        processed_df, analysis_results, dirs, skip=("story" not in steps_to_run)
+    )
 
 
 if __name__ == "__main__":

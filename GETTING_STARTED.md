@@ -143,6 +143,8 @@ This will run the entire pipeline with default settings, using the data in the `
 - `--run`: Steps to run (can specify multiple steps)
   - Available steps: `data-prep`, `analysis`, `vis`, `story`
   - Example: `--run vis story`
+- `--reset-db`: Reset the entire database
+  - Example: `--reset-db`
 
 #### Examples
 
@@ -162,6 +164,12 @@ Use a different data directory:
 
 ```bash
 python src/main.py --data-dir /path/to/enron/emails
+```
+
+Reset the database:
+
+```bash
+python src/main.py --reset-db
 ```
 
 ### Frontend

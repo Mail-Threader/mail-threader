@@ -47,6 +47,7 @@ class SummarizationClassification:
         output_dir="./analysis_results/",
         use_checkpoint=False,
         skip=False,
+        save_to_db=False,
     ):
         """
         Initialize the SummarizationClassification class.
@@ -56,11 +57,13 @@ class SummarizationClassification:
             output_dir (str): Directory to store analysis results
             use_checkpoint (bool): Whether to use checkpoint functionality for resuming interrupted analysis
             skip (bool): Whether to skip initialization and skip all other functions
+            save_to_db (bool): Whether to save the results to the database
         """
         self.input_dir = input_dir
         self.output_dir = output_dir
         self.use_checkpoint = use_checkpoint
         self.skip = skip
+        self.save_to_db = save_to_db
 
         if skip:
             return
@@ -1155,7 +1158,7 @@ class SummarizationClassification:
             logger.error(f"Error in narrative structure analysis: {e}")
             return None
 
-    def generate_story_elements(self, summary_results):
+    def generate_story_elements(self, summary_results, i: str):
         """
         Generate additional story elements from summarization results.
 
@@ -1169,20 +1172,22 @@ class SummarizationClassification:
             logger.warning("No summary results available to generate story elements")
             return {}
 
-        if "summaries" not in summary_results:
+        if i not in summary_results:
             logger.warning("No 'summaries' key found in summary results")
             return {}
 
         enhanced_results = {}
 
-        for subject, style_data in summary_results["summaries"].items():
+        for subject, style_data in summary_results[i].items():
             enhanced_results[subject] = {
                 "summary": style_data,
                 "narrative_analysis": {},
             }
 
+            logger.debug(style_data)
+
             # Get the summary text
-            summary_text = style_data["summary"]
+            summary_text = style_data
 
             # Analyze narrative structure
             narrative_analysis = self.analyze_narrative_structure(summary_text)
@@ -1317,6 +1322,84 @@ class SummarizationClassification:
                 logger.error(f"Error loading checkpoint: {e}")
         return res
 
+    def save_summarization_to_db(self, df: pd.DataFrame, results: dict) -> None:
+        """
+        Save summarization results to the database.
+
+        Args:
+            df (pd.DataFrame): Original DataFrame containing email data
+            results (dict): Dictionary containing summarization results
+        """
+        try:
+            if not results or "summaries" not in results:
+                logger.warning("No summarization results to save")
+                return
+
+            # Create a list to store summarization records
+            summarization_records = []
+
+            # Process each email's summaries
+            for subject, style_data in results["summaries"]["summaries"].items():
+                # Find the corresponding email in the original DataFrame
+                email_row = (
+                    df[df["subject"] == subject].iloc[0]
+                    if not df[df["subject"] == subject].empty
+                    else None
+                )
+                if email_row is None:
+                    continue
+
+                # Process each style of summary
+                for style, summary_info in style_data.items():
+                    # Calculate basic metrics
+                    summary_text = summary_info["summary"]
+                    word_count = len(summary_text.split())
+                    sentence_count = len(nltk.sent_tokenize(summary_text))
+
+                    # Count entities if available
+                    entity_count = 0
+                    if (
+                        "key_information" in summary_info
+                        and "entities" in summary_info["key_information"]
+                    ):
+                        entity_count = sum(
+                            len(entities)
+                            for entities in summary_info["key_information"]["entities"].values()
+                        )
+
+                    # Create record
+                    record = {
+                        "email_id": int(email_row.name),  # Use the DataFrame index as email_id
+                        "summary_style": style,
+                        "summary_text": summary_text,
+                        "word_count": word_count,
+                        "sentence_count": sentence_count,
+                        "entity_count": entity_count,
+                        "key_information": summary_info.get("key_information", {}),
+                        "created_at": datetime.now(),
+                    }
+                    summarization_records.append(record)
+
+            if summarization_records:
+                # Convert to DataFrame
+                summarization_df = pd.DataFrame(summarization_records)
+
+                # Save to database
+                save_to_postgresql(
+                    summarization_df,
+                    table_name="summarization_results",
+                    if_exists="append",
+                    success_message=f"Saved {len(summarization_records)} summarization results to database",
+                )
+                logger.info(
+                    f"Successfully saved {len(summarization_records)} summarization results to database"
+                )
+            else:
+                logger.warning("No summarization records to save")
+
+        except Exception as e:
+            logger.error(f"Error saving summarization results to database: {e}")
+
     def analyze_emails(self, df: Optional[pd.DataFrame], num_threads=None, batch_size=1000):
         """
         Optimized comprehensive analysis with improved parallel processing.
@@ -1419,13 +1502,26 @@ class SummarizationClassification:
                     results[task_name] = None
 
             # Enhance summaries if available
-            if results.get("summaries"):
-                results["enhanced_summaries"] = self.generate_story_elements(results["summaries"])
-                self.save_checkpoint(
-                    current_index + len(df),
-                    total_items,
-                    processed_items + ["enhanced_summaries"],
-                )
+            for i in [
+                "key_point_summaries",
+                "factual_summaries",
+                "creative_summaries",
+                "narrative_summaries",
+            ]:
+                if results.get(i):
+                    results[f"enhanced_{i}"] = self.generate_story_elements(results, i)
+                    self.save_checkpoint(
+                        current_index + len(df),
+                        total_items,
+                        processed_items + [f"enhanced_{i}"],
+                    )
+
+            logger.info(
+                f"Finished analysis: {results.get('summaries')}, save to database: {self.save_to_db}"
+            )
+            # Save summarization results to a database
+            if self.save_to_db and results.get("summaries"):
+                self.save_summarization_to_db(df, results)
 
             # Create a results DataFrame
             results_df = df.copy()

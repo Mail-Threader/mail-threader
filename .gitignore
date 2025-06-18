@@ -180,3 +180,6 @@ next-env.d.ts
 
 # migration files
 /frontend/**/migrations
+
+#firebase
+serviceAccountKey.json
