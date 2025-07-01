@@ -1,6 +1,7 @@
 import json
 import os
-from collections import Counter
+import re
+from collections import Counter, defaultdict
 from typing import Optional
 
 import matplotlib.pyplot as plt
@@ -8,7 +9,13 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from gensim.corpora import Dictionary
+from gensim.models import LdaModel
 from loguru import logger
+from minisom import MiniSom
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
+from sklearn.feature_extraction.text import TfidfVectorizer
 from textblob import TextBlob
 from wordcloud import STOPWORDS, WordCloud
 
@@ -317,22 +324,277 @@ class Visualization:
         wordcloud.to_file(path)
         print(f"saved: {path}")
 
+    def plot_topic_visualization(self, df, text_column="body", num_topics=5, num_words=20):
+        """
+        Train LDA from DataFrame and plot a word cloud for each topic.
+        """
+        if text_column not in df.columns:
+            print(f"Column '{text_column}' not found in DataFrame.")
+            return
+
+        # Preprocess text
+        def preprocess(text):
+            text = str(text).lower()
+            text = re.sub(r"[^a-z\s]", "", text)
+            tokens = text.split()
+            return [t for t in tokens if t not in STOPWORDS and len(t) > 2]
+
+        texts = df[text_column].dropna().apply(preprocess).tolist()
+
+        # Build dictionary and corpus
+        dictionary = Dictionary(texts)
+        corpus = [dictionary.doc2bow(text) for text in texts]
+
+        # Train LDA model
+        lda_model = LdaModel(corpus=corpus, id2word=dictionary, num_topics=num_topics, passes=10)
+
+        # Generate word clouds for each topic
+        for i, topic in lda_model.show_topics(formatted=False, num_words=num_words):
+            word_freq = dict(topic)
+            wordcloud = WordCloud(
+                width=800, height=400, background_color="white"
+            ).generate_from_frequencies(word_freq)
+
+            plt.figure(figsize=(10, 5))
+            plt.imshow(wordcloud, interpolation="bilinear")
+            plt.axis("off")
+            plt.title(f"Topic {i}")
+            plt.tight_layout()
+
+            # Save each wordcloud as a separate file
+            path = os.path.join(self.output_dir, f"topic_{i}_wordcloud.png")
+            wordcloud.to_file(path)
+            print(f"Saved word cloud for topic {i} to: {path}")
+
+    def plot_topic_wordcloud_for_keyword(
+        self, df, keyword, text_column="body", num_topics=5, num_words=20
+    ):
+        filtered_df = df[df[text_column].str.contains(keyword, case=False, na=False)]
+
+        if filtered_df.empty:
+            print(f"No documents found with keyword '{keyword}'.")
+            return
+
+        print(
+            f"Found {len(filtered_df)} documents with keyword '{keyword}'. Generating topic word clouds..."
+        )
+        self.plot_topic_visualization(
+            filtered_df, text_column=text_column, num_topics=num_topics, num_words=num_words
+        )
+
+    def plot_cluster_visualization(self, df, text_column="body", num_clusters=5):
+        if text_column not in df.columns:
+            print(f"Column '{text_column}' not found in DataFrame.")
+            return
+
+        # Get email texts and drop NaNs
+        texts = df[text_column].dropna().astype(str).tolist()
+        if not texts:
+            print("No text data found to cluster.")
+            return
+
+        # Vectorize texts using TF-IDF
+        vectorizer = TfidfVectorizer(stop_words="english", max_features=1000)
+        X = vectorizer.fit_transform(texts)
+
+        # Apply KMeans clustering
+        kmeans = KMeans(n_clusters=num_clusters, random_state=42)
+        labels = kmeans.fit_predict(X)
+
+        # Reduce dimensions for visualization
+        pca = PCA(n_components=2, random_state=42)
+        X_reduced = pca.fit_transform(X.toarray())
+
+        # Plot clusters
+        plt.figure(figsize=(10, 7))
+        scatter = plt.scatter(X_reduced[:, 0], X_reduced[:, 1], c=labels, cmap="tab10", alpha=0.7)
+        plt.title(f"KMeans Clustering of Emails ({num_clusters} clusters)")
+        plt.xlabel("PCA Component 1")
+        plt.ylabel("PCA Component 2")
+        plt.colorbar(scatter, label="Cluster")
+        plt.tight_layout()
+
+        # Save figure
+        path = os.path.join(self.output_dir, "cluster_visualization.png")
+        plt.savefig(path)
+        plt.close()
+        print(f"Saved cluster visualization to: {path}")
+
+    def plot_entity_relationships(
+        self, df, sender_col="from", receiver_col="to", top_senders=10, top_receivers_per_sender=5
+    ):
+        if sender_col not in df.columns or receiver_col not in df.columns:
+            print(f"Columns '{sender_col}' or '{receiver_col}' not found in DataFrame.")
+            return
+
+        # Count emails per sender
+        sender_counts = df[sender_col].value_counts().head(top_senders).index.tolist()
+
+        # Filter dataset to only top senders
+        filtered_df = df[df[sender_col].isin(sender_counts)]
+
+        G = nx.DiGraph()
+
+        for sender in sender_counts:
+            # Filter rows for this sender
+            sender_emails = filtered_df[filtered_df[sender_col] == sender]
+
+            # Count receivers for this sender
+            receivers_list = []
+            for recips in sender_emails[receiver_col].dropna():
+                if isinstance(recips, str):
+                    receivers_list.extend([r.strip() for r in recips.split(",")])
+                elif isinstance(recips, list):
+                    receivers_list.extend(recips)
+            receiver_counts = (
+                pd.Series(receivers_list).value_counts().head(top_receivers_per_sender)
+            )
+
+            # Add edges for top receivers
+            for receiver, count in receiver_counts.items():
+                if receiver:
+                    G.add_edge(sender, receiver, weight=count)
+
+        if len(G) == 0:
+            print("No relationships found to plot.")
+            return
+
+        plt.figure(figsize=(12, 12))
+        pos = nx.spring_layout(G, k=0.5, iterations=50)
+
+        weights = [G[u][v]["weight"] for u, v in G.edges()]
+        nx.draw_networkx_nodes(G, pos, node_size=300, node_color="skyblue")
+        # Draw each edge individually with its corresponding width
+        for (u, v), w in zip(G.edges(), weights):
+            nx.draw_networkx_edges(
+                G,
+                pos,
+                edgelist=[(u, v)],
+                arrowstyle="->",
+                arrowsize=10,
+                edge_color="gray",
+                width=w * 0.5,
+            )
+        nx.draw_networkx_labels(G, pos, font_size=10)
+
+        plt.title(f"Top {top_senders} Senders and their Top {top_receivers_per_sender} Receivers")
+        plt.axis("off")
+
+        path = os.path.join(self.output_dir, "entity_relationship_network_limited.png")
+        plt.savefig(path, bbox_inches="tight")
+        plt.close()
+
+        print(f"Saved limited entity relationship network to: {path}")
+
+    def plot_som(self, df, text_column="body", som_x=10, som_y=10):
+        if text_column not in df.columns:
+            print(f"Column '{text_column}' not found.")
+            return
+
+        texts = df[text_column].dropna().astype(str).tolist()
+        if not texts:
+            print("No text data available for SOM.")
+            return
+
+        # TF-IDF vectorization
+        vectorizer = TfidfVectorizer(stop_words="english", max_features=1000)
+        X = vectorizer.fit_transform(texts).toarray()
+        feature_names = vectorizer.get_feature_names_out()
+
+        # Initialize SOM
+        som = MiniSom(
+            x=som_x, y=som_y, input_len=X.shape[1], sigma=1, learning_rate=0.5, random_seed=42
+        )
+        som.train_random(X, num_iteration=100)
+
+        # Map emails to SOM neurons
+        neuron_to_texts = defaultdict(list)
+        for i, x in enumerate(X):
+            w = som.winner(x)
+            neuron_to_texts[w].append(i)
+
+        # Count hits per SOM neuron
+        hit_map = np.zeros((som_x, som_y))
+        for (x, y), idxs in neuron_to_texts.items():
+            hit_map[x, y] = len(idxs)
+
+        # Create labels for each neuron based on most important TF-IDF terms
+        neuron_labels = {}
+        for (x, y), idxs in neuron_to_texts.items():
+            combined_text = " ".join([texts[i] for i in idxs])
+            if combined_text.strip():
+                tfidf_local = TfidfVectorizer(stop_words="english", max_features=1)
+                top_term = tfidf_local.fit([combined_text]).get_feature_names_out()
+                if len(top_term) > 0:
+                    neuron_labels[(x, y)] = top_term[0]
+
+        # Plot
+        plt.figure(figsize=(10, 10))
+        plt.imshow(hit_map.T, origin="lower", cmap="Blues")
+        plt.colorbar(label="Number of Emails")
+        plt.title("SOM with Topic Labels")
+        plt.xticks(np.arange(som_x))
+        plt.yticks(np.arange(som_y))
+        plt.grid(True, linestyle="--", linewidth=0.5)
+
+        # Overlay labels
+        for (x, y), label in neuron_labels.items():
+            plt.text(
+                x, y, label, ha="center", va="center", fontsize=8, color="black", weight="bold"
+            )
+
+        # Save the figure
+        path = os.path.join(self.output_dir, "som_with_labels.png")
+        plt.savefig(path, bbox_inches="tight")
+        plt.close()
+
+        print(f"Saved SOM with topic labels to: {path}")
+
     def visualize_all(self):
         """
         Run all visualizations sequentially.
         """
         df = self.load_data()
+        # self.plot_email_volume_over_time(df)
+        # self.plot_sender_network(df)
+        # self.analyze_sentiment(df)
+        # self.generate_sentiment_wordclouds(df)
+        # self.visualize_wordcloud(df)
+        # self.plot_topic_visualization(df)  # Placeholder for LDA model visualization
+        # self.plot_topic_wordcloud_for_keyword(df, keyword="accenture")
+        # self.plot_cluster_visualization(df)
+        # self.plot_entity_relationships(df, top_senders=4, top_receivers_per_sender=2)
+        # self.plot_som(df)
+
+        # 1. Plot how email traffic changes over time (e.g., daily/monthly volume)
         self.plot_email_volume_over_time(df)
+
+        # 2. Visualize the communication network — who sends messages to whom
         self.plot_sender_network(df)
+
+        # 3. Perform sentiment analysis (positive/negative/neutral) on email content
         self.analyze_sentiment(df)
+
+        # 4. Generate separate word clouds for each sentiment category
         self.generate_sentiment_wordclouds(df)
+
+        # 5. Generate a general word cloud showing the most frequent words in all emails
         self.visualize_wordcloud(df)
 
-        # Future:
-        # self.plot_topic_visualization()
-        # self.plot_cluster_visualization()
-        # self.plot_entity_relationships()
-        # self.plot_som()
+        # 6. Visualize discovered topics from an LDA model (e.g., using pyLDAvis or bar plots)
+        self.plot_topic_visualization(df)  # Placeholder for LDA model visualization
+
+        # 7. Show a word cloud of words related to a specific keyword in topic clusters
+        self.plot_topic_wordcloud_for_keyword(df, keyword="accenture")
+
+        # 8. Visualize clustered emails (e.g., using PCA/t-SNE) to show semantic groupings
+        self.plot_cluster_visualization(df)
+
+        # 9. Plot a limited sender-receiver relationship graph (entity interaction network)
+        self.plot_entity_relationships(df, top_senders=4, top_receivers_per_sender=2)
+
+        # 10. Self-Organizing Map (SOM): Clustering emails and labeling grid cells with top terms
+        self.plot_som(df)
 
         print("All visualizations created.")
 
