@@ -2,40 +2,22 @@ import os
 import json
 import pandas as pd
 import numpy as np
-
 import nltk
-from nltk.tokenize import word_tokenize, sent_tokenize
+from nltk.tokenize import word_tokenize
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.pipeline import Pipeline
 from sklearn.cluster import KMeans, DBSCAN
-from sklearn.metrics.pairwise import cosine_similarity
 from loguru import logger
 import spacy
 import spacy.cli.download as download
 from transformers import pipeline as hf_pipeline
-import sqlite3
 import re
 from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor
 
 nltk.download("punkt")
 
-
 class SummarizationClassification:
-    """
-    Class responsible for summarization, classification, and categorization tasks:
-    - Text preprocessing (tokenization, lemmatization)
-    - Topic modeling
-    - Email clustering
-    - Entity recognition
-    - Sentiment analysis
-    - Text summarization
-    """
-    def __init__(self, input_dir="./processed_data/", output_dir="./analysis_results/"):
-        """
-        Initialize the SummarizationClassification object with input and output directories.
-        Loads the spaCy NER model and Hugging Face sentiment pipeline.
-        """
+    def __init__(self, input_dir="./processed_data/", output_dir="./analysis_results/", summarization_model="facebook/bart-large-cnn"):
         self.input_dir = input_dir
         self.output_dir = output_dir
 
@@ -44,12 +26,14 @@ class SummarizationClassification:
 
         try:
             self.ner_model = spacy.load("en_core_web_sm")
-            self.ner_model.max_length = 2_000_000 # increase max length (in characters)
-        except OSError as e:
+            self.ner_model.max_length = 2_000_000
+        except OSError:
             logger.info("Model not found. Downloading...")
             download("en_core_web_sm")
             self.ner_model = spacy.load("en_core_web_sm")
+
         self.sentiment_pipeline = hf_pipeline("sentiment-analysis")
+        self.summarizer = hf_pipeline("summarization", model=summarization_model)
 
     CUSTOM_STOPWORDS = {
         'thanks', 'fyi', 'attached', 'mail', 'doc', 'com', 'xls', 'pdf',
@@ -59,38 +43,10 @@ class SummarizationClassification:
     }
 
     def load_json_emails(self, filename="clean_emails.json"):
-        """
-        Loads email data from a JSON file.
-
-        Args:
-            filename (str): Name of the JSON file to load (default is 'clean_emails.json').
-
-        Returns:
-            pd.DataFrame: DataFrame of emails
-        """
         full_path = os.path.join(self.input_dir, filename)
         with open(full_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         return pd.DataFrame(data)
-
-    def load_pkl_emails(self, filename="clean_emails.json"):
-        """
-        Loads email data from a JSON file.
-
-        Args:
-            filename (str): Name of the JSON file to load (default is 'clean_emails.json').
-
-        Returns:
-            pd.DataFrame: DataFrame of emails
-        """
-        full_path = os.path.join(self.input_dir, filename)
-        logger.info(f"path is {full_path}")
-        try:
-            df = pd.read_pickle(full_path)
-            return df
-        except:
-            logger.error("Error loading pickle file")
-            return pd.DataFrame()
 
     def preprocess_text(self, text: str) -> str:
         text = text.lower()
@@ -98,42 +54,23 @@ class SummarizationClassification:
         return text.strip()
 
     def clean_text_column(self, df, column="body", new_column="clean_body"):
-        """
-        Clean a text column by removing excessive whitespace.
-        """
         df = df.copy()
         df[new_column] = df[column].fillna("").str.replace(r'\s+', ' ', regex=True)
         return df
 
     def tokenize_column(self, df: pd.DataFrame, text_column: str, new_column: str = "tokens") -> pd.DataFrame:
-        """
-        Tokenizes the specified text column into a list of word tokens.
-
-        Args:
-            df: Input DataFrame.
-            text_column: Column in the DataFrame that contains text to tokenize.
-            new_column: Name of the column where tokens will be stored.
-
-        Returns:
-            DataFrame with an additional column containing tokens.
-        """
         df = df.copy()
         df[new_column] = df[text_column].fillna("").apply(word_tokenize)
         return df
 
     def vectorize_document(self, documents, max_features=5000):
-        # Preprocess documents first
         cleaned_docs = [self.preprocess_text(doc) for doc in documents]
-
-        # Vectorizer with custom token pattern and stopwords
         vectorizer = TfidfVectorizer(
             stop_words='english',
             max_features=max_features,
-            token_pattern=r'(?u)\b[a-zA-Z]{3,}\b',  # keeps words with 3+ letters only
+            token_pattern=r'(?u)\b[a-zA-Z]{3,}\b'
         )
         tfidf_matrix = vectorizer.fit_transform(cleaned_docs)
-
-        # Manually filter out additional custom stopwords
         terms = np.array(vectorizer.get_feature_names_out())
         valid_indices = [i for i, term in enumerate(terms) if term not in self.CUSTOM_STOPWORDS]
 
@@ -145,25 +82,10 @@ class SummarizationClassification:
         return tfidf_matrix, vectorizer
 
     def create_vectorizer_model_pipeline(self, num_clusters=5):
-        """
-        Creates a pipeline for TF-IDF vectorization followed by KMeans clustering.
-
-        Args:
-            num_clusters: Number of clusters for KMeans.
-
-        Returns:
-            A scikit-learn Pipeline object.
-        """
-        pipeline = Pipeline([
-            ('tfidf', TfidfVectorizer(stop_words='english', max_features=5000)),
-            ('kmeans', KMeans(n_clusters=num_clusters, random_state=42))
-        ])
-        return pipeline
+        return Pipeline([('tfidf', TfidfVectorizer(stop_words='english', max_features=5000)),
+                         ('kmeans', KMeans(n_clusters=num_clusters, random_state=42))])
 
     def generate_cluster_topics(self, documents, labels, tfidf_matrix, vectorizer, top_n=6):
-        """
-        Generates top keywords per cluster/topic.
-        """
         terms = np.array(list(vectorizer.vocabulary_.keys()))
         topics = {}
         for cluster_id in sorted(set(labels)):
@@ -176,33 +98,12 @@ class SummarizationClassification:
             topics[cluster_id] = terms[top_indices].tolist()
         return topics
 
-
     def extract_top_words(self, tfidf_matrix, vectorizer, top_n=10):
-        """
-        Extracts top TF-IDF words across all documents.
-
-        Args:
-            tfidf_matrix: TF-IDF matrix.
-            vectorizer: Fitted TfidfVectorizer instance.
-            top_n: Number of top terms to return.
-
-        Returns:
-            List of top words with highest average TF-IDF scores.
-        """
         mean_scores = tfidf_matrix.mean(axis=0).A1
         top_indices = mean_scores.argsort()[::-1][:top_n]
         return vectorizer.get_feature_names_out()[top_indices].tolist()
 
     def cluster_documents(self, tfidf_matrix, method="kmeans", **kwargs):
-        """
-        Clusters documents using the specified method (KMeans or DBSCAN).
-        Args:
-            tfidf_matrix: TF-IDF matrix.
-            method: 'kmeans' or 'dbscan'
-            kwargs: Additional arguments for the clustering model.
-        Returns:
-            Fitted model and cluster labels.
-        """
         if method == "kmeans":
             model = KMeans(n_clusters=kwargs.get("n_clusters", 5), random_state=42)
         elif method == "dbscan":
@@ -213,9 +114,6 @@ class SummarizationClassification:
         return model, labels
 
     def extract_entities(self, df: pd.DataFrame, text_column: str = "body", chunk_size=500_000) -> pd.DataFrame:
-        """
-        Extract named entities (PERSON, ORG, GPE) from a text column using threading + chunking.
-        """
         def extract_single(text):
             persons, orgs, locations = [], [], []
             chunks = [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
@@ -232,19 +130,6 @@ class SummarizationClassification:
         return df
 
     def analyze_sentiment(self, df: pd.DataFrame, text_column: str = "body", batch_size: int = 32, max_length: int = 512) -> pd.DataFrame:
-        """
-
-        Performs sentiment analysis on text data using batching and truncation.
-
-        Args:
-            df: DataFrame containing the text data.
-            text_column: Column in the DataFrame with text.
-            batch_size: Number of samples to process at once.
-            max_length: Maximum length of input per text item.
-
-        Returns:
-            DataFrame with a new 'sentiment' column.
-        """
         texts = df[text_column].fillna("").apply(lambda x: x[:max_length]).tolist()
         sentiments = []
 
@@ -253,7 +138,7 @@ class SummarizationClassification:
             try:
                 results = self.sentiment_pipeline(batch, truncation=True)
                 batch_sentiments = [res['label'] if isinstance(res, dict) else "ERROR" for res in results]
-            except Exception as e:
+            except Exception:
                 batch_sentiments = ["ERROR"] * len(batch)
             sentiments.extend(batch_sentiments)
 
@@ -261,106 +146,68 @@ class SummarizationClassification:
         df['sentiment'] = sentiments
         return df
 
-    def summarize_corpus1(self, df: pd.DataFrame, text_column: str = "body", max_sentences: int = 5, max_input_sentences: int = 1000, num_emails: int = None) -> str:
-        """
-        Generates an extractive summary from the full corpus using TF-IDF and cosine similarity.
-        Trims text to avoid exceeding spaCy/max input memory limits..
-        """
-
+    def summarize_abstractive(
+        self,
+        df: pd.DataFrame,
+        text_column: str = "body",
+        max_length: int = 130,
+        min_length: int = 30,
+        return_dataframe: bool = True,
+        json_output_file: str = "summarized_emails.json",
+        batch_size: int = 8
+    ) -> pd.DataFrame:
         df = df.copy()
+        texts = df[text_column].fillna("").apply(lambda x: x[:1024]).tolist()
+        summaries = []
 
-        if num_emails is not None:
+        for i in tqdm(range(0, len(texts), batch_size), desc="Summarizing Emails"):
+            batch = texts[i:i + batch_size]
             try:
-                df = df.head(num_emails)
+                outputs = self.summarizer(batch, max_length=max_length, min_length=min_length, do_sample=False)
+                batch_summaries = [out["summary_text"] for out in outputs]
             except Exception as e:
-                logger.error(f"[Error trimming DataFrame]: {e}")
-                return ""
+                batch_summaries = [f"Error: {str(e)}"] * len(batch)
+            summaries.extend(batch_summaries)
 
-        # Confirm the number of rows used
-        logger.info(f"Summarizing {len(df)} emails.")
+        df["summary"] = summaries
 
-        full_text = " ".join(df[text_column].dropna())
-        #full_text = full_text[:1_000_000]
-        sentences = sent_tokenize(full_text)
+        records = df.to_dict(orient="records")
+        with open(os.path.join(self.output_dir, json_output_file), "w", encoding="utf-8") as f:
+            json.dump(records, f, ensure_ascii=False, indent=2)
 
-        if len(sentences) > max_input_sentences:
-            sentences = sentences[:max_input_sentences]
-
-        if len(sentences) <= max_sentences:
-            return " ".join(sentences)
-
-        tfidf = TfidfVectorizer(stop_words='english')
-        tfidf_matrix = tfidf.fit_transform(sentences)
-        sim_matrix = cosine_similarity(tfidf_matrix)
-        scores = sim_matrix.sum(axis=1)
-        top_indices = np.argsort(scores)[-max_sentences:]
-        top_indices.sort()
-        summary = " ".join([sentences[i] for i in top_indices])
-        return summary
+        return df if return_dataframe else None
 
     def summarize_corpus(
         self,
         df: pd.DataFrame,
-        num_emails: int = None,
-        summary_length: int = 5,
-        return_dataframe: bool = False
-    ) -> str | pd.DataFrame:
-        if num_emails is not None:
-            df = df.head(num_emails)
+        text_column: str = "clean_body",
+        max_length: int = 130,
+        min_length: int = 30,
+        batch_size: int = 8,
+        json_output_file: str = "corpus_summaries.json",
+    ) -> pd.DataFrame:
+        texts = df[text_column].fillna("").apply(lambda x: x[:1024]).tolist()
+        summaries = []
 
-        full_text = " ".join(df["body"].fillna(""))
+        for i in tqdm(range(0, len(texts), batch_size), desc="Summarizing Corpus"):
+            batch = texts[i:i + batch_size]
+            try:
+                outputs = self.summarizer(batch, max_length=max_length, min_length=min_length, do_sample=False)
+                batch_summaries = [out["summary_text"] for out in outputs]
+            except Exception as e:
+                batch_summaries = [f"Error: {str(e)}"] * len(batch)
+            summaries.extend(batch_summaries)
 
-        sentences = sent_tokenize(full_text)
+        df = df.copy()
+        df["summary"] = summaries
 
-        # Create TF-IDF matrix
-        vectorizer = TfidfVectorizer()
-        tfidf_matrix = vectorizer.fit_transform(sentences)
-        sentence_scores = tfidf_matrix.sum(axis=1).A1  # .A1 flattens to 1D array
+        records = df.to_dict(orient="records")
+        with open(os.path.join(self.output_dir, json_output_file), "w", encoding="utf-8") as f:
+            json.dump(records, f, ensure_ascii=False, indent=2)
 
-        # Rank sentences by score
-        ranked_sentences = sorted(
-            zip(sentences, sentence_scores), key=lambda x: x[1], reverse=True
-        )
+        return df
 
-        top_sentences = [sentence for sentence, _ in ranked_sentences[:summary_length]]
-        summary = " ".join(top_sentences)
-
-        if return_dataframe:
-            summary_df = pd.DataFrame({
-                "body": df["body"].fillna("").tolist()
-            })
-
-            summary_df["selected_sentences"] = summary_df["body"].apply(
-                lambda text: " ".join([s for s in sent_tokenize(text) if s in top_sentences])
-            )
-
-            return summary_df
-
-        return summary
-
-    def save_to_json(self, df, filename):
-        output_path = os.path.join(self.output_dir, filename)
-        df.to_json(output_path, orient="records", indent=4)
-
-
-# Main block for independant execution
-""" if __name__ == "__main__":
-    # Create SummarizationClassification instance
-    analyzer = SummarizationClassification()
-
-    df = analyzer.load_json_emails("data_preparation/clean_emails.json")
-    df = analyzer.clean_text_column(df)
-    df = analyzer.tokenize_column(df, text_column="clean_body")
-    X, vectorizer = analyzer.vectorize_document(df["clean_body"])
-    model, labels = analyzer.cluster_documents(X, method="kmeans", n_clusters=5)
-    df["cluster"] = labels
-    topics = analyzer.generate_cluster_topics(df["clean_body"], labels, X, vectorizer)
-    print("Cluster Topics:", topics)
-    top_words = analyzer.extract_top_words(X, vectorizer)
-    print("Top overall words:", top_words)
-    df = analyzer.extract_entities(df)
-    df = analyzer.analyze_sentiment(df)
-    summary = analyzer.summarize_corpus(df)
-    print("Corpus Summary:\n", summary)
-    analyzer.save_to_csv(df, "email_analysis_results.csv")
-    print("Done!") """
+    def save_to_json(self, df: pd.DataFrame, json_output_file: str):
+        records = df.to_dict(orient="records")
+        with open(json_output_file, "w", encoding="utf-8") as f:
+            json.dump(records, f, ensure_ascii=False, indent=2)
