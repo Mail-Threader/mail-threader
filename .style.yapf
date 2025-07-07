@@ -1,0 +1,22 @@
+# yapf configuration for the project
+# This configuration ensures consistent code formatting across the project
+#
+# Key settings:
+# - based_on_style: pep8 - Follows Python's official style guide
+# - column_limit: 100 - Enforces 100-character line limit for readability
+# - use_tabs: true - Uses tabs for indentation instead of spaces
+# - indent_width: 4 - Sets tab width to 4 spaces for consistent display
+#
+# Usage:
+# - Format single file: yapf --in-place filename.py
+# - Format directory: yapf --in-place --recursive src/
+# - Check formatting: yapf --diff --recursive src/
+# - VS Code integration: Automatically formats on save (Ctrl+S)
+
+[style]
+based_on_style = pep8
+column_limit = 100
+use_tabs = true
+indent_width = 4
+continuation_align_style = FIXED
+continuation_indent_width = 4

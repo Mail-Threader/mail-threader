@@ -143,8 +143,6 @@ This will run the entire pipeline with default settings, using the data in the `
 - `--run`: Steps to run (can specify multiple steps)
   - Available steps: `data-prep`, `analysis`, `vis`, `story`
   - Example: `--run vis story`
-- `--reset-db`: Reset the entire database
-  - Example: `--reset-db`
 
 #### Examples
 
@@ -164,12 +162,6 @@ Use a different data directory:
 
 ```bash
 python src/main.py --data-dir /path/to/enron/emails
-```
-
-Reset the database:
-
-```bash
-python src/main.py --reset-db
 ```
 
 ### Frontend
@@ -200,26 +192,30 @@ This project follows strict code style guidelines enforced by several tools:
 
 #### Backend
 
-1. **Black**: Code formatting
-2. **isort**: Import sorting
-3. **Ruff**: Linting
-4. **mypy**: Type checking
+1. **yapf**: Code formatting (configured to use tabs)
+
+#### Code Formatting Configuration
+
+The project uses **yapf** for Python code formatting with the following configuration (defined in `.style.yapf`):
+
+- **Tab-based indentation**: Uses tabs instead of spaces
+- **100-character line limit**: Enforces readability
+- **PEP 8 base style**: Follows Python's official style guide
+- **4-space tab width**: Consistent with Python standards
 
 You can run these tools manually:
 
 ```bash
-# Format code
-black src tests
+# Format code (uses .style.yapf configuration)
+yapf --in-place --recursive src tests
 
-# Sort imports
-isort src tests
-
-# Lint code
-ruff check src tests
-
-# Type check
-mypy src
+# Format all Python files in src directory only
+yapf --in-place --recursive src/
 ```
+
+#### VS Code Integration
+
+The project is configured to automatically format code on save using yapf. The settings in `.vscode/settings.json` ensure consistent formatting across the team.
 
 #### Frontend
 

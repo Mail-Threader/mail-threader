@@ -32,10 +32,7 @@ Code Style
 We use several tools to maintain code quality:
 
 Backend (Python):
-- Black for code formatting
-- isort for import sorting
-- Ruff for linting
-- mypy for type checking
+- yapf for code formatting (tab-based indentation)
 
 Frontend (TypeScript/React):
 - ESLint for linting

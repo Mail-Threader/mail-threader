@@ -242,7 +242,7 @@ const Nav = () => {
 							</DropdownMenu>
 							<Link href="/dashboard/account">
 								<Avatar>
-									<AvatarImage src="https://github.com/shadcn.png" />
+									<AvatarImage src="" />
 									<AvatarFallback>
 										{user.email[0].toUpperCase()}
 									</AvatarFallback>

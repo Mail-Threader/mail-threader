@@ -12,7 +12,9 @@ import { StoryTopics } from '@/components/features/stories/StoryTopics';
 import { StoryEmails } from '@/components/features/stories/StoryEmails';
 import { Info } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import { ArrowRight } from 'lucide-react';
 
 interface Story {
 	id: string;
@@ -307,6 +309,14 @@ export default function StoryExplorerPage() {
 									{story.network && <div className="mt-6"><StoryNetwork network={story.network} /></div>}
 									{story.topics && <div className="mt-6"><StoryTopics topics={story.topics} /></div>}
 									{story.relatedEmails && <div className="mt-6"><StoryEmails emails={story.relatedEmails} /></div>}
+									<div className="mt-6 flex justify-end">
+										<Link href={`/dashboard/stories/${story.id}`}>
+											<Button variant="outline" className="group">
+												View Full Story
+												<ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+											</Button>
+										</Link>
+									</div>
 								</AccordionContent>
 							</AccordionItem>
 						))

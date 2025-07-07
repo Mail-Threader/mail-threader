@@ -3,7 +3,6 @@ Utility functions for the Enron Email Analysis Pipeline.
 """
 
 import os
-import re
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import nltk
@@ -15,7 +14,7 @@ from supabase import Client, create_client
 
 
 def initialize_nltk(resources: Optional[List[str]] = None) -> None:
-    """
+	"""
     Initialize NLTK resources. Downloads required NLTK data if not already present.
 
     Args:
@@ -25,69 +24,43 @@ def initialize_nltk(resources: Optional[List[str]] = None) -> None:
     Raises:
         Exception: If there's an error downloading NLTK resources.
     """
-    if resources is None:
-        resources = ["punkt", "stopwords", "wordnet"]
+	try:
+		# First, ensure NLTK data directory exists
+		nltk_data_dir = os.path.expanduser("~/nltk_data")
 
-    try:
-        for resource in resources:
-            nltk.download(resource, quiet=True)
-        logger.info(f"Successfully initialized NLTK resources: {', '.join(resources)}")
-    except Exception as e:
-        logger.error(f"Error downloading NLTK resources: {e}")
-        raise Exception(f"Failed to initialize NLTK resources: {e}")
+		logger.info(f"NLTK data directory: {nltk_data_dir}")
 
+		if not os.path.exists(nltk_data_dir):
+			os.makedirs(nltk_data_dir)
 
-def sample_function(a: int, b: int) -> int:
-    """
-    A sample function that adds two numbers.
+		# Download required NLTK resources
+		required_packages = resources or [
+			"punkt",
+			"stopwords",
+			"wordnet",
+			"omw-1.4",
+			"punkt_tab",
+			"averaged_perceptron_tagger_eng",
+		]
 
-    Args:
-        a: First number
-        b: Second number
+		for package in required_packages:
+			try:
+				nltk.download(package, download_dir=nltk_data_dir, quiet=True)
+			except Exception as e:
+				logger.error(f"Error downloading NLTK package {package}: {e}")
 
-    Returns:
-        The sum of a and b
-    """
-    return a + b
-
-
-def safe_get(data: Dict[str, Any], key: str, default: Any = None) -> Any:
-    """
-    Safely get a value from a dictionary.
-
-    Args:
-        data: Dictionary to get value from
-        key: Key to look up
-        default: Default value to return if key is not found
-
-    Returns:
-        Value from dictionary or default if key not found
-    """
-    return data.get(key, default)
-
-
-def filter_list(items: List[Any], condition: Callable) -> List[Any]:
-    """
-    Filter a list based on a condition function.
-
-    Args:
-        items: List of items to filter
-        condition: Function that takes an item and returns True/False
-
-    Returns:
-        Filtered list containing only items where condition(item) is True
-    """
-    return [item for item in items if condition(item)]
+	except Exception as e:
+		save_error_log(f"Error initializing NLTK: {e}")
 
 
 def upload_to_supabase(
-    file_path: str,
-    bucket_name: str = "visualizations",
-    supabase_url: Optional[str] = None,
-    supabase_key: Optional[str] = None,
-    public_access: bool = True,
+	file_path: str,
+	bucket_name: str = "visualizations",
+	supabase_url: Optional[str] = None,
+	supabase_key: Optional[str] = None,
+	public_access: bool = True,
 ) -> Union[str, None]:
-    """
+	"""
     Upload a file to a Supabase storage bucket.
 
     Args:
@@ -100,57 +73,59 @@ def upload_to_supabase(
     Returns:
         URL of the uploaded file if successful, None otherwise
     """
-    try:
-        # Get Supabase credentials from environment variables if not provided
-        if supabase_url is None:
-            supabase_url = os.environ.get("SUPABASE_URL")
-            if not supabase_url:
-                logger.error(
-                    "No Supabase URL provided and SUPABASE_URL environment variable is not set"
-                )
-                return None
+	try:
+		# Get Supabase credentials from environment variables if not provided
+		if supabase_url is None:
+			supabase_url = os.environ.get("SUPABASE_URL")
+			if not supabase_url:
+				logger.error(
+					"No Supabase URL provided and SUPABASE_URL environment variable is not set")
+				return None
 
-        if supabase_key is None:
-            supabase_key = os.environ.get("SUPABASE_SERVICE_KEY")
-            if not supabase_key:
-                logger.error(
-                    "No Supabase key provided and SUPABASE_SERVICE_KEY environment variable is not set"
-                )
-                return None
+		if supabase_key is None:
+			supabase_key = os.environ.get("SUPABASE_SERVICE_KEY")
+			if not supabase_key:
+				logger.error(
+					"No Supabase key provided and SUPABASE_SERVICE_KEY environment variable is not set"
+				)
+				return None
 
-        # Initialize Supabase client
-        supabase_client: Client = create_client(supabase_url, supabase_key)
+		# Initialize Supabase client
+		supabase_client: Client = create_client(supabase_url, supabase_key)
 
-        # Get the file name from the path
-        file_name = os.path.basename(file_path)
+		# Get the file name from the path
+		file_name = os.path.basename(file_path)
 
-        # Read the file
-        with open(file_path, "rb") as f:
-            file_content = f.read()
+		# Read the file
+		with open(file_path, "rb") as f:
+			file_content = f.read()
 
-        # Upload the file to the bucket
-        response = supabase_client.storage.from_(bucket_name).upload(
-            path=file_name, file=file_content, file_options={"content-type": "auto"}
-        )
+		# Upload the file to the bucket
+		response = supabase_client.storage.from_(bucket_name).upload(path=file_name,
+			file=file_content,
+			file_options={"content-type": "auto"})
 
-        # Get the public URL if public access is enabled
-        if public_access:
-            file_url = supabase_client.storage.from_(bucket_name).get_public_url(file_name)
-            logger.info(f"Uploaded file to Supabase bucket '{bucket_name}': {file_url}")
-            return file_url
-        else:
-            logger.info(f"Uploaded file to Supabase bucket '{bucket_name}': {file_name}")
-            return file_name
+		# Get the public URL if public access is enabled
+		if public_access:
+			file_url = supabase_client.storage.from_(bucket_name).get_public_url(file_name)
+			logger.info(f"Uploaded file to Supabase bucket '{bucket_name}': {file_url}")
+			return file_url
+		else:
+			logger.info(f"Uploaded file to Supabase bucket '{bucket_name}': {file_name}")
+			return file_name
 
-    except Exception as e:
-        logger.error(f"Error uploading file to Supabase: {e}")
-        return None
+	except Exception as e:
+		logger.error(f"Error uploading file to Supabase: {e}")
+		return None
 
 
 def load_processed_df(
-    search_dir: str, search_file_name: str, db_table: str = None, limit: int = None
-) -> pd.DataFrame:
-    """
+	search_dir: str,
+	search_file_name: str,
+	db_table: Optional[str] = None,
+	limit: Optional[int] = None,
+) -> pd.DataFrame | None:
+	"""
 
     Load the latest processed data file from the specified directory.
 
@@ -159,223 +134,153 @@ def load_processed_df(
         search_file_name (str): File name to search for.
         db_table (str | None): None or Name of the database table to load data from.
     """
-    pkl_files = [
-        f for f in os.listdir(search_dir) if f.startswith(search_file_name) and f.endswith(".pkl")
-    ]
+	try:
+		pkl_files = [
+			f for f in os.listdir(search_dir)
+			if f.startswith(search_file_name) and f.endswith(".pkl")
+		]
 
-    json_files = [
-        f for f in os.listdir(search_dir) if f.startswith(search_file_name) and f.endswith(".json")
-    ]
+		json_files = [
+			f for f in os.listdir(search_dir)
+			if f.startswith(search_file_name) and f.endswith(".json")
+		]
 
-    if pkl_files:
-        pkl_files.sort(reverse=True)
-        file_path = os.path.join(search_dir, pkl_files[0])
+		if pkl_files:
+			pkl_files.sort(reverse=True)
+			file_path = os.path.join(search_dir, pkl_files[0])
 
-        try:
-            df = pd.read_pickle(file_path)
-            df = df.head(limit) if limit else df
-            logger.info(f"Loaded data from {file_path}: {len(df)} emails")
-            return df
-        except Exception as e:
-            logger.error(f"Error loading data from {file_path}: {e}")
-            return pd.DataFrame()
+			try:
+				df = pd.read_pickle(file_path)
+				if limit is not None:
+					df = df.head(limit)
+				logger.info(f"Loaded data from {file_path}: {len(df)} emails")
+				return df
+			except Exception as e:
+				logger.error(f"Error loading data from {file_path}: {e}")
+				save_error_log(f"Error loading data from {file_path}: {e}", )
+				return None
 
-    if json_files:
-        json_files.sort(reverse=True)
-        file_path = os.path.join(search_dir, json_files[0])
+		if json_files:
+			json_files.sort(reverse=True)
+			file_path = os.path.join(search_dir, json_files[0])
 
-        try:
-            df = pd.read_json(file_path)
-            df = df.head(limit) if limit else df
-            logger.info(f"Loaded data from {file_path}: {len(df)} emails")
-            return df
-        except Exception as e:
-            logger.error(f"Error loading data from {file_path}: {e}")
-            return pd.DataFrame()
+			try:
+				df = pd.read_json(file_path)
+				if limit is not None:
+					df = df.head(limit)
+				logger.info(f"Loaded data from {file_path}: {len(df)} emails")
+				return df
+			except Exception as e:
+				logger.error(f"Error loading data from {file_path}: {e}")
+				save_error_log(f"Error loading data from {file_path}: {e}", )
+				return None
 
-    if not pkl_files and not json_files:
-        logger.warning(f"No processed data files found in {search_dir}")
+		if not pkl_files and not json_files:
+			logger.warning(f"No processed data files found in {search_dir}")
 
-        if db_table is None:
-            logger.warning("No database table specified. Skipping database load.")
-            return pd.DataFrame()
+			if db_table is None:
+				logger.warning("No database table specified. Skipping database load.")
+				save_error_log("No processed data files found and no database table specified.", )
+				return None
 
-        logger.warning("Fetching data from database...")
+			logger.warning("Fetching data from database...")
 
-        try:
-            engine = create_engine(os.environ.get("DATABASE_URL"))
-            df = pd.read_sql(f"SELECT * FROM {db_table}", engine)
-            logger.info(f"Loaded data from database: {len(df)} emails")
-            return df
-        except Exception as e:
-            logger.error(f"Error loading data from database: {e}")
+			try:
+				engine = create_engine(os.environ.get("DATABASE_URL") or "")
+				df = pd.read_sql(f"SELECT * FROM {db_table}", engine)
+				logger.info(f"Loaded data from database: {len(df)} emails")
+				return df
+			except Exception as e:
+				logger.error(f"Error loading data from database: {e}")
 
-    return pd.DataFrame()
-
-
-def calculate_influence_score(metrics: Dict[str, float]) -> float:
-    """
-    Calculate influence score from actor metrics.
-
-    Args:
-        metrics (Dict[str, float]): Dictionary containing actor metrics
-
-    Returns:
-        float: Calculated influence score
-    """
-    try:
-        degree_centrality = metrics.get("degree_centrality", 0)
-        betweenness_centrality = metrics.get("betweenness_centrality", 0)
-        pagerank = metrics.get("pagerank", 0)
-        return (degree_centrality + betweenness_centrality + pagerank) / 3
-    except Exception as e:
-        logger.error(f"Error calculating influence score: {e}")
-        return 0.0
+		return None
+	except Exception as e:
+		logger.error(f"Error loading processed data: {e}")
+		save_error_log(f"Error loading processed data: {e}")
+		return None
 
 
-def calculate_communication_patterns(emails: pd.DataFrame) -> Dict[str, Any]:
-    """
-    Calculate communication patterns from email data.
+def save_error_log(
+	error_message: str | int | Exception | None | tuple | bool | list | dict,
+	error_dir: str = "./error_logs/",
+	file_name: Optional[str] = None,
+) -> None:
+	"""
+    Save an error message to a log file.
 
     Args:
-        emails (pd.DataFrame): DataFrame containing email data
-
-    Returns:
-        Dict[str, Any]: Dictionary containing communication patterns
+        error_message (str | int | Exception | None | tuple | bool | list | dict): The error message to log.
+        error_dir (str): Directory to save the error log file.
+        file_name (str, optional): Name of the log file. If None, uses a timestamped name.
     """
-    try:
-        daily_patterns = emails.groupby(emails["date"].dt.day_name()).size()
-        busiest_day = daily_patterns.idxmax()
-        busiest_day_count = int(daily_patterns.max())
+	if not os.path.exists(error_dir):
+		os.makedirs(error_dir)
 
-        response_times = []
-        for _, email in emails.iterrows():
-            if pd.notna(email["date"]):
-                replies = emails[
-                    (emails["subject"].str.contains(email["subject"], na=False))
-                    & (emails["date"] > email["date"])
-                ]
-                if not replies.empty:
-                    response_time = (replies["date"].min() - email["date"]).total_seconds() / 3600
-                    response_times.append(response_time)
+	curr_timestamp = pd.Timestamp.now()
 
-        avg_response_time = np.mean(response_times) if response_times else None
+	if file_name is None:
+		# search for most recent log file within 1 hour
+		recent_files = [f for f in os.listdir(error_dir) if f.endswith(".log")]
+		if recent_files:
+			recent_files.sort(reverse=True)
+			temp_file_name = recent_files[0]
 
-        return {
-            "busiest_day": busiest_day,
-            "busiest_day_count": busiest_day_count,
-            "avg_response_time": f"{avg_response_time:.1f} hours" if avg_response_time else "N/A",
-        }
-    except Exception as e:
-        logger.error(f"Error calculating communication patterns: {e}")
-        return {}
+			file_timestamp = pd.Timestamp(temp_file_name.split(".")[0])
+			if (curr_timestamp - file_timestamp).total_seconds() < 3600:
+				# If the most recent log file is within the last hour, use it
+				file_name = recent_files[0]
 
+			if file_name is None:
+				# If no recent log file found, create a new one with current timestamp
+				file_name = f"{pd.Timestamp.now()}.log"
+		else:
+			# If no recent log file found, create a new one with current timestamp
+			file_name = f"{pd.Timestamp.now()}.log"
 
-def calculate_event_metrics(event_emails: pd.DataFrame) -> Dict[str, Any]:
-    """
-    Calculate metrics for significant events.
-
-    Args:
-        event_emails (pd.DataFrame): DataFrame containing event emails
-
-    Returns:
-        Dict[str, Any]: Dictionary containing event metrics
-    """
-    try:
-        participants = set()
-        for _, email in event_emails.iterrows():
-            if pd.notna(email["from"]):
-                participants.update(re.findall(r"[\w\.-]+@[\w\.-]+", email["from"]))
-            if pd.notna(email["to"]):
-                participants.update(re.findall(r"[\w\.-]+@[\w\.-]+", email["to"]))
-
-        return {
-            "participant_count": len(participants),
-            "avg_email_length": float(event_emails["body"].str.len().mean()),
-            "reply_rate": float(
-                len(event_emails[event_emails["subject"].str.contains("Re:", na=False)])
-                / len(event_emails)
-            ),
-        }
-    except Exception as e:
-        logger.error(f"Error calculating event metrics: {e}")
-        return {}
+	file_path = os.path.join(error_dir, file_name)
+	with open(file_path, "a") as f:
+		f.write(f"{pd.Timestamp.now()}: {error_message}\n")
 
 
-def calculate_thread_metrics(thread: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    Calculate metrics for email threads.
-
-    Args:
-        thread (List[Dict[str, Any]]): List of emails in thread
-
-    Returns:
-        Dict[str, Any]: Dictionary containing thread metrics
-    """
-    try:
-        participants = set()
-        for email in thread:
-            if "from" in email and email["from"]:
-                sender_emails = re.findall(r"[\w\.-]+@[\w\.-]+", email["from"])
-                participants.update(sender_emails)
-
-        thread_duration = None
-        if thread[0]["date"] and thread[-1]["date"]:
-            thread_duration = (thread[-1]["date"] - thread[0]["date"]).total_seconds() / 3600
-
-        response_times = []
-        for i in range(len(thread) - 1):
-            if thread[i]["date"] and thread[i + 1]["date"]:
-                response_time = (thread[i + 1]["date"] - thread[i]["date"]).total_seconds() / 3600
-                response_times.append(response_time)
-
-        avg_response_time = np.mean(response_times) if response_times else None
-
-        return {
-            "duration_hours": f"{thread_duration:.1f}" if thread_duration else "N/A",
-            "avg_response_time": f"{avg_response_time:.1f} hours" if avg_response_time else "N/A",
-            "participant_count": len(participants),
-        }
-    except Exception as e:
-        logger.error(f"Error calculating thread metrics: {e}")
-        return {}
-
-
-def analyze_topic_trend(topic_counts: Dict[str, Dict[int, int]], topic_num: int) -> Dict[str, Any]:
-    """
-    Analyze the trend of a topic over time.
-
-    Args:
-        topic_counts (Dict[str, Dict[int, int]]): Dictionary containing topic counts over time
-        topic_num (int): Topic number to analyze
-
-    Returns:
-        Dict[str, Any]: Dictionary containing trend analysis
-    """
-    try:
-        if not topic_counts:
-            return {"trend": "unknown", "peak_period": None, "peak_count": 0}
-
-        topic_data = {period: counts.get(topic_num, 0) for period, counts in topic_counts.items()}
-
-        if not topic_data:
-            return {"trend": "unknown", "peak_period": None, "peak_count": 0}
-
-        peak_period = max(topic_data.items(), key=lambda x: x[1])
-
-        values = list(topic_data.values())
-        if len(values) < 2:
-            trend = "stable"
-        else:
-            slope = np.polyfit(range(len(values)), values, 1)[0]
-            if slope > 0.1:
-                trend = "increasing"
-            elif slope < -0.1:
-                trend = "decreasing"
-            else:
-                trend = "stable"
-
-        return {"trend": trend, "peak_period": peak_period[0], "peak_count": peak_period[1]}
-    except Exception as e:
-        logger.error(f"Error analyzing topic trend: {e}")
-        return {"trend": "unknown", "peak_period": None, "peak_count": 0}
+custom_stop_words = set([
+	"enron",
+	"ect",
+	"corp",
+	"com",
+	"recipient",
+	"subject",
+	"email",
+	"message",
+	"cc",
+	"to",
+	"from",
+	"sent",
+	"pm",
+	"am",
+	"forwarded",
+	"original",
+	"attached",
+	"http",
+	"https",
+	"www",
+	"energy",
+	"deal",
+	"trading",
+	"enron.com",
+	"enron.net",
+	"enronxgate",
+	"e-mail",
+	"mail",
+	"contact",
+	"address",
+	"phone",
+	"fax",
+	"please",
+	"thanks",
+	"regards",
+	"attached",
+	"forward",
+	"re",
+	"fw",
+	"fwd",
+])
