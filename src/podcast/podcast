@@ -1,0 +1,21 @@
+from gtts import gTTS
+import json
+import os
+
+# Load your JSON
+with open("stories_20250705_110905.json", "r", encoding="utf-8") as f:
+    data = json.load(f)
+
+# Create folder
+os.makedirs("output_audio", exist_ok=True)
+
+# Generate TTS for each story
+for i, item in enumerate(data):
+    story = item.get("story", "").strip()
+    if not story:
+        continue
+
+    tts = gTTS(text=story, lang="en")
+    filename = f"output_audio/story_{i + 1}.mp3"
+    tts.save(filename)
+    print(f"Saved: {filename}")
