@@ -1,12 +1,10 @@
 import argparse
 import os
 from typing import Optional
-
+import time
 import pandas as pd
 from dotenv import load_dotenv
-from google.cloud.firestore import AsyncClient
 from loguru import logger
-
 from data_preparation import DataPreparation
 from database import DatabaseManager
 from story_development import StoryDevelopment
@@ -17,6 +15,8 @@ from visualization import Visualization
 default_data_dir = os.path.join(os.getcwd(), "data")
 default_output_dir = os.path.join(os.getcwd(), "output")
 default_error_dir = os.path.join(os.getcwd(), "error_logs")
+
+LIMIT = 50
 
 
 def parse_arguments():
