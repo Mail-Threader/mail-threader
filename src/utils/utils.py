@@ -46,3 +46,49 @@ def filter_list(items: List[Any], condition: Callable) -> List[Any]:
         Filtered list containing only items where condition(item) is True
     """
     return [item for item in items if condition(item)]
+
+
+custom_stop_words = set(
+    [
+        "enron",
+        "ect",
+        "corp",
+        "com",
+        "recipient",
+        "subject",
+        "email",
+        "message",
+        "cc",
+        "to",
+        "from",
+        "sent",
+        "pm",
+        "am",
+        "forwarded",
+        "original",
+        "attached",
+        "http",
+        "https",
+        "www",
+        "energy",
+        "deal",
+        "trading",
+        "enron.com",
+        "enron.net",
+        "enronxgate",
+        "e-mail",
+        "mail",
+        "contact",
+        "address",
+        "phone",
+        "fax",
+        "please",
+        "thanks",
+        "regards",
+        "attached",
+        "forward",
+        "re",
+        "fw",
+        "fwd",
+    ]
+)

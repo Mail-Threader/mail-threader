@@ -4,11 +4,13 @@ import re
 from collections import Counter, defaultdict
 from typing import Optional
 
+import firebase_admin
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from firebase_admin import credentials, storage
 from gensim.corpora import Dictionary
 from gensim.models import LdaModel
 from loguru import logger
@@ -18,6 +20,8 @@ from sklearn.decomposition import PCA
 from sklearn.feature_extraction.text import TfidfVectorizer
 from textblob import TextBlob
 from wordcloud import STOPWORDS, WordCloud
+
+from src.utils import custom_stop_words
 
 
 class Visualization:
@@ -52,7 +56,7 @@ class Visualization:
 
         input_dir = input_dir or self.input_dir or "./analysis_results/"
         # List all JSON files
-        json_files = [f for f in os.listdir(input_dir) if f.endswith(".json")]
+        json_files = [f for f in os.listdir(input_dir) if f.endswith(".pkl")]
 
         if not json_files:
             raise FileNotFoundError(f"No JSON files found in {input_dir}")
@@ -63,8 +67,10 @@ class Visualization:
         print(f"📂 Loading data from: {path}")
 
         # Load JSON
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        # with open(path, "r", encoding="utf-8") as f:
+        #     data = json.load(f)
+
+        data = pd.read_pickle(path)
 
         # Convert to DataFrame
         df = pd.DataFrame(data)
@@ -171,7 +177,7 @@ class Visualization:
         """
 
         # Count emails sent per sender
-        top_senders = df["from"].value_counts().nlargest(50).index
+        top_senders = df["from"].value_counts().nlargest(30).index
 
         # Filter emails between top senders only
         filtered_df = df[df["from"].isin(top_senders) & df["to"].isin(top_senders)]
@@ -203,7 +209,7 @@ class Visualization:
             )
         nx.draw_networkx_labels(G, pos, font_size=10)
 
-        plt.title("Top 50 Email Senders Network")
+        plt.title("Top 30 Email Senders Network")
         plt.axis("off")
 
         # Save plot
@@ -316,7 +322,12 @@ class Visualization:
 
         # Create the word cloud
         wordcloud = WordCloud(
-            width=1000, height=500, background_color="white", stopwords=STOPWORDS
+            width=1000,
+            height=500,
+            background_color="white",
+            stopwords=set(STOPWORDS).union(custom_stop_words),
+            colormap="coolwarm",
+            max_words=200,
         ).generate(text)
 
         # Save to file
