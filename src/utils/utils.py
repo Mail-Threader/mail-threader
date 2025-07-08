@@ -284,3 +284,39 @@ custom_stop_words = set([
 	"fw",
 	"fwd",
 ])
+
+
+def sort_emails_by_date(df: pd.DataFrame):
+	"""
+        Sort emails by date in ascending order.
+
+        Args:
+            df (pd.DataFrame): DataFrame containing email data.
+
+        Returns:
+            pd.DataFrame: Sorted DataFrame.
+        """
+	logger.info("Sorting emails by date...")
+
+	date_formats = [
+		"%d/%m/%Y %H:%M:%S",
+		"%Y-%m-%d %H:%M:%S",
+		"%m/%d/%Y %H:%M:%S",
+		"%Y/%m/%d %H:%M:%S",
+	]
+
+	for date_format in date_formats:
+		try:
+			df["date"] = pd.to_datetime(
+				df["date"],
+				format=date_format,
+			)
+			# If we successfully parsed any dates, break the loop
+			if not df["date"].isna().all():
+				break
+		except Exception:
+			continue
+
+	df = df.sort_values(by="date", ascending=True).reset_index(drop=True)
+
+	return df

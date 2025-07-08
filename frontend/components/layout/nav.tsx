@@ -131,7 +131,7 @@ const Nav = () => {
 		<header className="w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
 			<div className="container flex h-16 items-center max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 				<Link
-					href={isAuthenticated ? '/dashboard/data-view' : '/'}
+					href={isAuthenticated ? '/dashboard/stories' : '/'}
 					className="flex items-center gap-2 mr-6"
 				>
 					<MailThreaderLogo className="h-7 w-7 text-primary" />

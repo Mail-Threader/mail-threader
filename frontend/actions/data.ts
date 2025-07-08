@@ -2,8 +2,8 @@
 
 import { db } from '@/db';
 import {
-	ProcessedEmail,
-	processedEmails,
+	ProcessedData,
+	processedData,
 	summarizedEmails,
 	visualizationData,
 } from '@/db/schema';
@@ -12,16 +12,16 @@ import { and, count, desc, isNotNull, ne, notIlike } from 'drizzle-orm';
 export async function getProcessedEmails(
 	pageNum = 1,
 	pageSize = 10,
-): Promise<{ data: ProcessedEmail[]; total: number }> {
+): Promise<{ data: ProcessedData[]; total: number }> {
 	const [data, total] = await Promise.all([
 		db
 			.select()
-			.from(processedEmails)
+			.from(processedData)
 			.limit(pageSize)
 			.offset((pageNum - 1) * pageSize),
 		db
 			.select({ count: count() })
-			.from(processedEmails)
+			.from(processedData)
 			.then((result) => result[0].count),
 	]);
 
@@ -91,16 +91,16 @@ export async function getProcessedEmailsAction({
 	joinOperator: 'and' | 'or';
 	filterFlag: 'basicFilters' | 'advancedFilters';
 	subject: string;
-}): Promise<{ data: ProcessedEmail[]; total: number }> {
+}): Promise<{ data: ProcessedData[]; total: number }> {
 	const [data, total] = await Promise.all([
 		db
 			.select()
-			.from(processedEmails)
+			.from(processedData)
 			.limit(perPage)
 			.offset((page - 1) * perPage),
 		db
 			.select({ count: count() })
-			.from(processedEmails)
+			.from(processedData)
 			.then((result) => result[0].count),
 	]);
 

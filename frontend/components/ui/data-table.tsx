@@ -95,7 +95,7 @@ import {
 	TableRow,
 } from '@/components/ui/table'; // Assuming these exist
 import { Tabs, TabsContent } from '@/components/ui/tabs'; // Assuming these exist
-import { ProcessedEmail } from '@/db/schema';
+import { ProcessedData } from '@/db/schema';
 
 // Create a separate component for the drag handle
 function DragHandle({ id }: { id: UniqueIdentifier }) {
@@ -118,7 +118,7 @@ function DragHandle({ id }: { id: UniqueIdentifier }) {
 	);
 }
 
-const columns: ColumnDef<ProcessedEmail>[] = [
+const columns: ColumnDef<ProcessedData>[] = [
 	{
 		id: 'drag',
 		header: () => null,
@@ -262,7 +262,7 @@ const columns: ColumnDef<ProcessedEmail>[] = [
 	},
 ];
 
-function DraggableRow({ row }: { row: Row<ProcessedEmail> }) {
+function DraggableRow({ row }: { row: Row<ProcessedData> }) {
 	const { transform, transition, setNodeRef, isDragging } = useSortable({
 		id: row.id, // Use the row.id
 	});
@@ -287,8 +287,8 @@ function DraggableRow({ row }: { row: Row<ProcessedEmail> }) {
 	);
 }
 
-export function DataTable({ data: initialData }: { data: ProcessedEmail[] }) {
-	const [data, setData] = React.useState<ProcessedEmail[]>(() => initialData);
+export function DataTable({ data: initialData }: { data: ProcessedData[] }) {
+	const [data, setData] = React.useState<ProcessedData[]>(() => initialData);
 	const [rowSelection, setRowSelection] = React.useState({});
 	const [columnVisibility, setColumnVisibility] =
 		React.useState<VisibilityState>({});
@@ -601,7 +601,7 @@ const chartConfig = {
 	},
 } satisfies ChartConfig;
 
-function TableCellViewer({ item }: { item: ProcessedEmail }) {
+function TableCellViewer({ item }: { item: ProcessedData }) {
 	const isMobile = useIsMobile();
 
 	return (

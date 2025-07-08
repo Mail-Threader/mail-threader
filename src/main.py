@@ -120,7 +120,7 @@ def setup_directories(args):
 
 def run_data_preparation(
 	dirs: dict,
-	db: Optional[AsyncClient],
+	db: DatabaseManager,
 	skip=False,
 	limit: Optional[int] = None,
 ):
@@ -129,7 +129,7 @@ def run_data_preparation(
 
 	Args:
 			dirs (dict): Dictionary containing directory paths
-			db (AsyncClient): Firestore database client or None
+			db (DatabaseManager): Database manager instance
 			skip (bool): Whether to skip this step
 			limit (int): Limit the number of emails to process. If None, process all emails.
 
@@ -146,14 +146,14 @@ def run_data_preparation(
 	df = data_prep.process_all_emails(limit=limit)
 	data_prep.save_to_pickle(df)
 	logger.info(f"Processed {len(df)} emails")
-	data_prep.save_to_firestore(db, df)
+	data_prep.save_to_database(df, db)
 	return df
 
 
 def run_summarization_classification(
 	processed_email_data: Optional[pd.DataFrame],
 	dirs: dict,
-	db: Optional[AsyncClient] = None,
+	db: DatabaseManager,
 	skip=False,
 	limit: Optional[int] = None,
 ):
@@ -163,7 +163,7 @@ def run_summarization_classification(
 	Args:
 			processed_email_data (pandas.DataFrame): Processed email data or None
 			dirs (dict): Dictionary containing directory paths.
-			db (AsyncClient): Firestore database client or None
+			db (DatabaseManager): Database manager instance
 			skip (bool): Whether to skip this step.
 			limit (int): Limit the number of emails to process. If None, process all emails.
 
@@ -196,17 +196,17 @@ def run_summarization_classification(
 def run_visualization(processed_data: Optional[pd.DataFrame],
 	analysis_results: Optional[pd.DataFrame],
 	dirs: dict,
-	db: Optional[AsyncClient] = None,
+	db: DatabaseManager,
 	skip=False):
 	"""
 	Run the visualization step.
 
 	Args:
-			df (pandas.DataFrame): Processed email data or None
-			analysis_results (pandas.DataFrame): Analysis results or None
-			dirs (dict): Dictionary containing directory paths
-			db (AsyncClient): Firestore database client or None
-			skip (bool): Whether to skip this step
+		df (pandas.DataFrame): Processed email data or None
+		analysis_results (pandas.DataFrame): Analysis results or None
+		dirs (dict): Dictionary containing directory paths
+		db (DatabaseManager): Database manager instance
+		skip (bool): Whether to skip this step
 
 	Returns:
 			dict: Paths to generated visualizations
@@ -230,7 +230,7 @@ def run_story_development(
 	processed_data: Optional[pd.DataFrame],
 	analysis_results: Optional[pd.DataFrame],
 	dirs: dict,
-	db: Optional[AsyncClient] = None,
+	db: DatabaseManager,
 	skip=False,
 	limit: Optional[int] = None,
 ):
@@ -240,7 +240,7 @@ def run_story_development(
 	Args:
 		analysis_results (pd.DataFrame|None): Analysis results
 		dirs (dict): Dictionary containing directory paths
-		db (AsyncClient): Firestore database client or None
+		db (DatabaseManager): Database manager instance
 		skip (bool): Whether to skip this step
 		limit (int): Limit the number of emails to process. If None, process all emails.
 
@@ -258,7 +258,10 @@ def run_story_development(
 		analysis_results_dir=dirs["analysis_results_dir"],
 		output_dir=dirs["stories_dir"],
 	)
-	stories = story_developer.develop_story(processed_data, analysis_results, limit=limit)
+	stories = story_developer.develop_story(processed_data,
+		analysis_results,
+		limit=limit,
+		db_manager=db)
 	return stories
 
 
@@ -274,8 +277,9 @@ def main():
 
 	# Initialize database
 	logger.info("Initializing database...")
-	db_manager = DatabaseManager()
-	db = db_manager.get_db()
+	db = DatabaseManager()
+	db.connect()
+	db.create_tables()
 
 	# Initializing NLTK
 	initialize_nltk()

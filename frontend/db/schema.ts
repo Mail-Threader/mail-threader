@@ -1,12 +1,13 @@
 import {
-	date,
-	doublePrecision,
 	integer,
 	json,
+	jsonb,
 	pgEnum,
 	pgTable,
 	text,
 	timestamp,
+	varchar,
+	numeric,
 } from 'drizzle-orm/pg-core';
 
 export const roleEnum = pgEnum('role', ['DEV', 'CLIENT']);
@@ -57,98 +58,226 @@ export const fileStorageTable = pgTable('file_storage', {
 export type FileStorage = typeof fileStorageTable.$inferSelect;
 export type NewFileStorage = typeof fileStorageTable.$inferInsert;
 
-export const processedEmails = pgTable('processed_emails', {
-	messageId: text('message_id'),
-	originalMessageId: text('original_message_id'),
-	mainId: text('main_id'),
-	filename: text(),
-	type: text(),
-	date: text(),
-	from: text(),
-	xFrom: text('X-From'),
-	xTo: text('X-To'),
-	originalSender: text('original_sender'),
-	originalDate: text('original_Date'),
-	to: text(),
-	subject: text(),
-	cc: text(),
-	xCc: text('X-cc'),
-	body: text(),
+// Tables based on src/database/database_schema_config.sql
+
+export const processedData = pgTable('processed_data', {
+	messageId: varchar('message_id', { length: 255 }).primaryKey(),
+	mainId: varchar('main_id', { length: 255 }),
+	filename: varchar('filename', { length: 255 }),
+	type: varchar('type', { length: 50 }),
+	date: timestamp('date'),
+	from: varchar('from', { length: 255 }),
+	to: varchar('to', { length: 255 }),
+	subject: text('subject'),
+	body: text('body'),
+	createdAt: timestamp('created_at').defaultNow(),
+	updatedAt: timestamp('updated_at').defaultNow(),
+	resultType: varchar('result_type', { length: 50 }).notNull(),
 });
 
-export type ProcessedEmail = typeof processedEmails.$inferSelect;
+export type ProcessedData = typeof processedData.$inferSelect;
 
-export const summarizedEmails = pgTable('summarized_emails', {
-	messageId: text('message_id'),
-	originalMessageId: text('original_message_id'),
-	mainId: text('main_id'),
-	filename: text(),
-	type: text(),
-	date: text(),
-	from: text(),
-	xFrom: text('X-From'),
-	xTo: text('X-To'),
-	originalSender: text('original_sender'),
-	originalDate: text('original_Date'),
-	to: text(),
-	subject: text(),
-	cc: text(),
-	xCc: text('X-cc'),
-	body: text(),
-	cleanBody: text('clean_body'),
-	tokens: text(),
-	cluster: integer(),
-	persons: text(),
-	organizations: text(),
-	locations: text(),
-	sentiment: text(),
-	processedDate: text('processed_date'),
-	corpusSummary: text('corpus_summary'),
+export const analysisResult = pgTable('analysis_result', {
+	messageId: varchar('message_id', { length: 255 }).primaryKey(),
+	mainId: varchar('main_id', { length: 255 }),
+	filename: varchar('filename', { length: 255 }),
+	type: varchar('type', { length: 50 }),
+	date: timestamp('date'),
+	from: varchar('from', { length: 255 }),
+	to: varchar('to', { length: 255 }),
+	subject: text('subject'),
+	body: text('body'),
+	entities: jsonb('entities'),
+	sentiment: jsonb('sentiment'),
+	dominantTopic: integer('dominant_topic'),
+	topicStrength: numeric('topic_strength'),
+	topicLabel: varchar('topic_label', { length: 255 }),
+	cluster: integer('cluster'),
+	threadId: integer('thread_id'),
+	createdAt: timestamp('created_at').defaultNow(),
+	updatedAt: timestamp('updated_at').defaultNow(),
+	resultType: varchar('result_type', { length: 50 }).notNull(),
 });
 
-export type SummarizedEmail = typeof summarizedEmails.$inferSelect;
+export type AnalysisResult = typeof analysisResult.$inferSelect;
 
-export const visualizationData = pgTable('visualization_data', {
-	fileType: text('file_type'),
-	fileUrl: text('file_url'),
+export const threadedStories = pgTable('threaded_stories', {
+	threadId: integer('thread_id').notNull(),
+	style: varchar('style', { length: 50 }).notNull(),
+	title: text('title'),
+	story: text('story'),
+	relatedEmails: jsonb('related_emails'),
+	emailCount: integer('email_count'),
+	resultType: varchar('result_type', { length: 50 }).notNull(),
+	createdAt: timestamp('created_at').defaultNow(),
+	updatedAt: timestamp('updated_at').defaultNow(),
 });
 
-export type VisualizationData = typeof visualizationData.$inferSelect;
+export type ThreadedStory = typeof threadedStories.$inferSelect;
 
-export const stories = pgTable('stories', {
-	title: text(),
-	type: text(),
-	actor: text(),
-	metrics: json('metrics'),
-	commonTopics: json('common_topics'),
-	sampleSubjects: json('sample_subjects'),
-	summary: text(),
-	date: date(),
-	emailCount: doublePrecision('email_count'),
-	commonWords: json('common_words'),
-	subject: text(),
-	numEmails: doublePrecision('num_emails'),
-	participants: json('participants'),
-	startDate: timestamp('start_date', { mode: 'string' }),
-	endDate: timestamp('end_date', { mode: 'string' }),
-	topicId: text('topic_id'),
-	keywords: json('keywords'),
-	timestamp: text(),
-	communicationPatterns: json('communication_patterns'),
-	eventMetrics: json('event_metrics'),
-	threadMetrics: json('thread_metrics'),
-	topicMetrics: json('topic_metrics'),
-	relatedEmails: json('related_emails'),
-	influenceScore: doublePrecision('influence_score'),
-	deviation: doublePrecision('deviation'),
-	participantCount: integer('participant_count'),
-	avgEmailLength: doublePrecision('avg_email_length'),
-	replyRate: doublePrecision('reply_rate'),
-	durationHours: doublePrecision('duration_hours'),
-	avgResponseTime: doublePrecision('avg_response_time'),
-	trend: text(),
-	peakPeriod: text('peak_period'),
-	peakCount: integer('peak_count'),
+export const nonThreadedStories = pgTable('non_threaded_stories', {
+	messageId: varchar('message_id', { length: 255 }).notNull(),
+	style: varchar('style', { length: 50 }).notNull(),
+	title: text('title'),
+	story: text('story'),
+	relatedEmails: jsonb('related_emails'),
+	emailCount: integer('email_count'),
+	resultType: varchar('result_type', { length: 50 }).notNull(),
+	createdAt: timestamp('created_at').defaultNow(),
+	updatedAt: timestamp('updated_at').defaultNow(),
 });
 
-export type Story = typeof stories.$inferSelect;
+export type NonThreadedStory = typeof nonThreadedStories.$inferSelect;
+
+export const storySummaries = pgTable('summaries', {
+	summaryId: varchar('summary_id', { length: 255 }).primaryKey(),
+	originalId: varchar('original_id', { length: 255 }),
+	summaryTitle: text('summary_title'),
+	summaryContent: text('summary_content'),
+	summaryType: varchar('summary_type', { length: 50 }),
+	createdAt: timestamp('created_at').defaultNow(),
+	updatedAt: timestamp('updated_at').defaultNow(),
+	summaryMetadata: jsonb('summary_metadata'),
+	resultType: varchar('result_type', { length: 50 }).notNull(),
+});
+
+export type StorySummary = typeof storySummaries.$inferSelect;
+
+// export const topicAnalysis = pgTable('topic_analysis', {
+// 	id: serial('id').primaryKey(),
+// 	topicName: varchar('topic_name', { length: 255 }).notNull(),
+// 	keywords: jsonb('keywords'),
+// 	topicDistribution: jsonb('topic_distribution'),
+// 	createdAt: timestamp('created_at').defaultNow(),
+// 	resultType: varchar('result_type', { length: 50 }).notNull(),
+// });
+
+// export type TopicAnalysis = typeof topicAnalysis.$inferSelect;
+
+// export const clusterAnalysis = pgTable('cluster_analysis', {
+// 	id: serial('id').primaryKey(),
+// 	clusterName: varchar('cluster_name', { length: 255 }).notNull(),
+// 	clusterSize: integer('cluster_size'),
+// 	commonWords: jsonb('common_words'),
+// 	clusterMetrics: jsonb('cluster_metrics'),
+// 	createdAt: timestamp('created_at').defaultNow(),
+// 	resultType: varchar('result_type', { length: 50 }).notNull(),
+// });
+
+// export type ClusterAnalysis = typeof clusterAnalysis.$inferSelect;
+
+// export const entityAnalysis = pgTable(
+// 	'entity_analysis',
+// 	{
+// 		id: serial('id').primaryKey(),
+// 		entityType: varchar('entity_type', { length: 50 }).notNull(),
+// 		entityName: varchar('entity_name', { length: 255 }).notNull(),
+// 		frequency: integer('frequency'),
+// 		context: jsonb('context'),
+// 		createdAt: timestamp('created_at').defaultNow(),
+// 		resultType: varchar('result_type', { length: 50 }).notNull(),
+// 	},
+// 	(table) => {
+// 		return {
+// 			uniqueEntityTypeEntityName: unique(
+// 				'idx_entity_analysis_type_name',
+// 			).on(table.entityType, table.entityName),
+// 		};
+// 	},
+// );
+
+// export type EntityAnalysis = typeof entityAnalysis.$inferSelect;
+
+// export const sentimentAnalysis = pgTable(
+// 	'sentiment_analysis',
+// 	{
+// 		id: serial('id').primaryKey(),
+// 		emailId: integer('email_id').references(() => processedData.id),
+// 		sentimentType: varchar('sentiment_type', { length: 50 }),
+// 		sentimentScore: doublePrecision('sentiment_score'),
+// 		confidenceScore: doublePrecision('confidence_score'),
+// 		createdAt: timestamp('created_at').defaultNow(),
+// 		resultType: varchar('result_type', { length: 50 }).notNull(),
+// 	},
+// 	(table) => {
+// 		return {
+// 			emailIdIdx: index('idx_sentiment_analysis_email_id').on(
+// 				table.emailId,
+// 			),
+// 		};
+// 	},
+// );
+
+// export type SentimentAnalysis = typeof sentimentAnalysis.$inferSelect;
+
+// export const summarizationResults = pgTable(
+// 	'summarization_results',
+// 	{
+// 		id: serial('id').primaryKey(),
+// 		emailId: integer('email_id').references(() => processedData.id),
+// 		summaryStyle: varchar('summary_style', { length: 50 }),
+// 		summaryText: text('summary_text'),
+// 		wordCount: integer('word_count'),
+// 		sentenceCount: integer('sentence_count'),
+// 		entityCount: integer('entity_count'),
+// 		actionItemCount: integer('action_item_count'),
+// 		keyInformation: jsonb('key_information'),
+// 		createdAt: timestamp('created_at').defaultNow(),
+// 		resultType: varchar('result_type', { length: 50 }).notNull(),
+// 	},
+// 	(table) => {
+// 		return {
+// 			emailIdIdx: index('idx_summarization_results_email_id').on(
+// 				table.emailId,
+// 			),
+// 		};
+// 	},
+// );
+
+// export type SummarizationResult = typeof summarizationResults.$inferSelect;
+
+// export const visualizationData = pgTable('visualization_data', {
+// 	id: serial('id').primaryKey(),
+// 	visualizationType: varchar('visualization_type', { length: 50 }).notNull(),
+// 	fileUrl: text('file_url'),
+// 	metadata: jsonb('metadata'),
+// 	createdAt: timestamp('created_at').defaultNow(),
+// 	resultType: varchar('result_type', { length: 50 }).notNull(),
+// });
+
+// export type VisualizationData = typeof visualizationData.$inferSelect;
+
+// export const analysisMetadata = pgTable('analysis_metadata', {
+// 	id: serial('id').primaryKey(),
+// 	analysisType: varchar('analysis_type', { length: 50 }).notNull(),
+// 	parameters: jsonb('parameters'),
+// 	startTime: timestamp('start_time'),
+// 	endTime: timestamp('end_time'),
+// 	status: varchar('status', { length: 50 }),
+// 	createdAt: timestamp('created_at').defaultNow(),
+// 	resultType: varchar('result_type', { length: 50 }).notNull(),
+// });
+
+// export type AnalysisMetadata = typeof analysisMetadata.$inferSelect;
+
+// export const stories = pgTable(
+// 	'stories',
+// 	{
+// 		id: serial('id').primaryKey(),
+// 		threadId: integer('thread_id'),
+// 		title: text('title'),
+// 		story: text('story'),
+// 		relatedEmails: jsonb('related_emails'),
+// 		emailCount: integer('email_count'),
+// 		messageId: varchar('message_id', { length: 255 }),
+// 		createdAt: timestamp('created_at').defaultNow(),
+// 		resultType: varchar('result_type', { length: 50 }).notNull(),
+// 	},
+// 	(table) => {
+// 		return {
+// 			threadIdIdx: index('idx_stories_thread_id').on(table.threadId),
+// 		};
+// 	},
+// );
+
+// export type Story = typeof stories.$inferSelect;

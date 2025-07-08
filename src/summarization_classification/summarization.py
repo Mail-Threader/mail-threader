@@ -4,7 +4,6 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor as FutureExecutor
 from datetime import datetime
 from typing import Optional
-
 import numpy as np
 import pandas as pd
 from gliner import GLiNER
@@ -21,8 +20,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 from transformers.pipelines import pipeline
-
-from utils import custom_stop_words, load_processed_df, save_error_log
+from utils import custom_stop_words, load_processed_df, save_error_log, sort_emails_by_date
+from database import DatabaseManager
 
 
 class Summarization:
@@ -101,44 +100,6 @@ class Summarization:
 			save_error_log(f"Error initializing sentiment analysis pipeline: {e}")
 			logger.error(f"Error initializing sentiment analysis pipeline: {e}")
 			self.sentiment_analyzer = None
-
-	@staticmethod
-	def sort_emails_by_date(df: pd.DataFrame):
-		"""
-        Sort emails by date in ascending order.
-
-        Args:
-            df (pd.DataFrame): DataFrame containing email data.
-
-        Returns:
-            pd.DataFrame: Sorted DataFrame.
-        """
-		logger.info("Sorting emails by date...")
-
-		date_formats = [
-			"%d/%m/%Y %H:%M:%S",
-			"%Y-%m-%d %H:%M:%S",
-			"%m/%d/%Y %H:%M:%S",
-			"%Y/%m/%d %H:%M:%S",
-		]
-
-		for date_format in date_formats:
-			try:
-				df["date"] = pd.to_datetime(
-					df["date"],
-					format=date_format,
-				)
-				# If we successfully parsed any dates, break the loop
-				if not df["date"].isna().all():
-					break
-			except Exception:
-				logger.warning(
-					f"Failed to parse dates with format {date_format}. Trying next format...")
-				continue
-
-		df = df.sort_values(by="date", ascending=True).reset_index(drop=True)
-
-		return df
 
 	def get_valid_texts_and_indices(self, df: pd.DataFrame, valid_num_tokens=3):
 		"""
@@ -954,7 +915,7 @@ class Summarization:
 				logger.error("No data found in the input directory.")
 				return None
 
-			df = self.sort_emails_by_date(processed_emails_df)
+			df = sort_emails_by_date(processed_emails_df)
 
 			logger.info(f"Analyzing {len(df)} emails...")
 
@@ -1065,24 +1026,37 @@ class Summarization:
 		df.to_pickle(output_path)
 		logger.info(f"DataFrame saved to {output_path}")
 
-	def save_to_json(
-		self,
-		df: pd.DataFrame,
-	):
-		"""
-        Save the DataFrame to a JSON file.
+	def save_to_database(self, df: pd.DataFrame, db: DatabaseManager):
+		"""Save a Pandas DataFrame to a database table."""
+		if df is None or df.empty:
+			logger.warning("DataFrame is empty. Skipping database save.")
+			return
 
-        Args:
-            df (pd.DataFrame): DataFrame to save.
-            output_filename (str): Name of the output JSON file.
-        """
-		if not os.path.exists(self.output_dir):
-			os.makedirs(self.output_dir)
+		if db is None:
+			logger.error("Database connection is not provided. Skipping database save.")
+			return
 
-		timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-		output_filename = f"analysis_results_{timestamp}.json"
-
-		output_path = os.path.join(self.output_dir, output_filename)
-		df.to_json(output_path, orient="records", lines=True)
-		logger.info(f"DataFrame saved to {output_path}")
+		try:
+			table_name = "analysis_results"
+			columns = [
+				"message_id",
+				"main_id",
+				"filename",
+				"type",
+				"date",
+				"from",
+				"to",
+				"subject",
+				"body",
+				"entities",
+				"sentiment",
+				"dominant_topic",
+				"topic_strength",
+				"topic_label",
+				"cluster",
+				"thread_id",
+			]
+			db.insert_from_dataframe(df, table_name, columns=columns)
+			logger.success(f"✅ Successfully saved {len(df)} rows to database table '{table_name}'")
+		except Exception as e:
+			logger.error(f"Error saving DataFrame to database: {e}")

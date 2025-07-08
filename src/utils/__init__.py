@@ -1,5 +1,5 @@
 from .utils import (custom_stop_words, initialize_nltk, load_processed_df, save_error_log,
-	upload_to_supabase)
+	upload_to_supabase, sort_emails_by_date)
 
 __all__ = [
 	"initialize_nltk",
@@ -7,4 +7,5 @@ __all__ = [
 	"load_processed_df",
 	"save_error_log",
 	"custom_stop_words",
+	"sort_emails_by_date",
 ]

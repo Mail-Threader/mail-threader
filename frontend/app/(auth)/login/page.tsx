@@ -56,7 +56,7 @@ export default function LoginPage() {
 					title: 'Login Successful',
 					description: 'Welcome back!',
 				});
-				router.push('/dashboard/data-view'); // Cookie is set by server action
+				router.push('/dashboard/stories'); // Cookie is set by server action
 			} else {
 				if (result.errors?._form) {
 					setFormError(result.errors._form.join(', '));

@@ -1,6 +1,5 @@
-from .database import DatabaseManager, save_df
+from .database_manager import DatabaseManager
 
 __all__ = [
 	"DatabaseManager",
-	"save_df",
 ]

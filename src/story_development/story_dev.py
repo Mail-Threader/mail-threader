@@ -2,17 +2,18 @@ import os
 import re
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor as FutureExecutor
-from datetime import timedelta
+from datetime import timedelta, datetime
 from typing import Optional
-
 import networkx as nx
 import numpy as np
 import ollama
 import pandas as pd
 from loguru import logger
 from tqdm import tqdm
-
-from utils import custom_stop_words, load_processed_df, save_error_log
+from utils import custom_stop_words, load_processed_df, save_error_log, sort_emails_by_date
+import json
+import uuid
+from database.database_manager import DatabaseManager
 
 
 class StoryDevelopment:
@@ -71,54 +72,87 @@ class StoryDevelopment:
 
 		for thread_id, thread_df in tqdm(
 			grouped,
-			total=len(grouped),
+			total=len(grouped) if limit is None else limit,
 			desc="Generating stories from threads",
 		):
 			if pd.isna(thread_id):
 				continue
 
-			prompt = ((
-				"Based on the following email thread, write a concise and factual narrative story. "
-				"The story should strictly adhere to the information provided in the emails,"
-				"capturing only the key events, decisions and emotions showed in input data."
-				"Avoid introducing any external details or creative interpretations not explicitly mentioned."
-				"Focus on summarizing the thread's progression objectively and include relevant details from all emails.\n\n"
-				"Understand the entities, names and their nicknames, relationships, and events in the emails"
-				"In response, only provide the story without any additional commentary or explanations.\n\n"
-			) if style == "factual" else (
-				"Based on the following email thread, write a compelling and creative narrative story. "
-				"The story should capture the key events, decisions, and emotions of the people involved. "
-				"Feel free to add creative elements while staying true to the essence of the emails.\n\n"
-				# Based on the following email thread, write a compelling factual narrative story. The story should capture the key events, decisions, and emotions of the people involved. \n\n
-			))
+			# Construct the prompt for the LLM, instructing it to return JSON with title and story
+			if style == "factual":
+				prompt = (
+					"Based on the following email thread, write a concise and factual narrative story. "
+					"The story should strictly adhere to the information provided in the emails, "
+					"capturing only the key events, decisions, and emotions showed in input data. "
+					"Avoid introducing any external details or creative interpretations not explicitly mentioned. "
+					"Focus on summarizing the thread's progression objectively and include relevant details from all emails. "
+					"Understand the entities, names and their nicknames, relationships, and events in the emails. "
+					"In response, provide a JSON object with two keys: 'title' for a concise title "
+					"summarizing the story, and 'story' for the narrative itself. "
+					"Do not include any additional commentary or explanations outside the JSON.\n\n"
+				)
+			else:  # style == "creative"
+				prompt = (
+					"Based on the following email thread, write a compelling and creative narrative story. "
+					"The story should capture the key events, decisions, and emotions of the people involved. "
+					"Feel free to add creative elements while staying true to the essence of the emails. "
+					"In response, provide a JSON object with two keys: 'title' for a creative and engaging title "
+					"summarizing the story, and 'story' for the narrative itself. "
+					"Do not include any additional commentary or explanations outside the JSON.\n\n"
+				)
 			for _, row in thread_df.iterrows():
 				prompt += f"From: {row['from']}\nTo: {row['to']}\nSubject: {row['subject']}\nDate: {row['date']}\n\n{row['body']}\n\n---\n\n"
-			try:
 
+			try:
 				result = ollama.generate(
 					model="llama3.2:3b",
 					prompt=prompt,
+					format="json",  # Request JSON output from Ollama
 					options={
-					"temperature": (0.2 if style == "factual" else
-					0.5),  # Lower temperature for less creativity, more factual output
-					"top_p": 0.5,  # Lower top_p to focus on highly probable tokens
-					},
-				)
+					"temperature": (0.2 if style == "factual" else 0.5),
+					"top_p": 0.5,
+					})
 
-				response = result.get("response", "")
-				if not response:
+				response_text = result.get("response", "")
+
+				if not response_text:
 					logger.warning(f"No response generated for thread {thread_id}. Skipping...")
-					continue
+					return None
+
+				try:
+					# Attempt to parse the response as JSON
+					parsed_response = json.loads(response_text)
+					if not parsed_response or "title" not in parsed_response or ("story"
+						not in parsed_response and "description" not in parsed_response):
+						continue
+					story_title = parsed_response.get("title", "No Title Generated")
+					story_content = parsed_response.get("story",
+						response_text).strip()  # Fallback to raw text if 'story' key is missing
+				except json.JSONDecodeError as e:
+					logger.error(
+						f"Failed to parse JSON for thread {thread_id}: {e}. Raw response: {response_text[:200]}..."
+					)
+					save_error_log(f"JSON parsing error for thread {thread_id}: {e}")
+					story_title = "Parsing Error - See Logs"
+					story_content = response_text.strip(
+					)  # Use raw response as story if parsing fails
+
+				# get message_ids in a list
+				message_ids = thread_df["message_id"].dropna().tolist()
 
 				stories.append({
 					"thread_id": thread_id,
-					"story": response.strip(),
+					"title": story_title,
+					"story": story_content,
+					"related_emails": message_ids,
+					"email_count": len(thread_df),
+					"style": style,
 				})
 
-				i += 1
 				if limit is not None and i >= limit:
 					logger.info(f"Reached limit of {limit} stories. Stopping generation.")
 					break
+				i += 1
 			except Exception as e:
 				logger.error(f"Error generating story for thread {thread_id}: {e}")
 				save_error_log(f"Error generating story for thread {thread_id}: {e}")
@@ -136,12 +170,12 @@ class StoryDevelopment:
 		Generate stories from email data.
 
 		Args:
-						df (pd.DataFrame): DataFrame containing email data with thread_id.
-						limit (Optional[int]): Maximum number of stories to generate. If None, generate all.
-						style (str): Style of the story to generate, either "factual" or "creative".
+			df (pd.DataFrame): DataFrame containing email data with thread_id.
+			limit (Optional[int]): Maximum number of stories to generate. If None, generate all.
+			style (str): Style of the story to generate, either "factual" or "creative".
 
 		Returns:
-						pd.DataFrame: DataFrame with generated stories.
+			pd.DataFrame: DataFrame with generated stories.
 		"""
 
 		logger.info("Generating stories from dataframe which don't have thread_id...")
@@ -153,44 +187,73 @@ class StoryDevelopment:
 
 		for idx, row in tqdm(
 			df_no_thread.iterrows(),
-			total=len(df_no_thread),
+			total=len(df_no_thread) if limit is None else limit,
 			desc="Generating stories from non-threaded emails",
 		):
-			prompt = (("Based on the following email, write a concise and factual narrative story. "
-				"The story should strictly adhere to the information provided in the email,"
-				"capturing only the key events, decisions and emotions showed in input data."
-				"Avoid introducing any external details or creative interpretations not explicitly mentioned."
-				"Focus on summarizing the email's content objectively and include relevant details.\n\n"
-				"Understand the entities, names and their nicknames, relationships, and events in the email"
-				"In response, only provide the story without any additional commentary or explanations.\n\n"
-						) if style == "factual" else
-				("Based on the following email, write a compelling and creative narrative story. "
-				"The story should capture the key events, decisions, and emotions of the people involved. "
-				"Feel free to add creative elements while staying true to the essence of the email.\n\n"
-					))
+			# Construct the prompt for the LLM, instructing it to return JSON with title and story
+			if style == "factual":
+				prompt = (
+					"Based on the following email, write a concise and factual narrative story. "
+					"The story should strictly adhere to the information provided in the email, "
+					"capturing only the key events, decisions, and emotions showed in input data. "
+					"Avoid introducing any external details or creative interpretations not explicitly mentioned. "
+					"Focus on summarizing the email's content objectively and include relevant details. "
+					"Understand the entities, names and their nicknames, relationships, and events in the email. "
+					"In response, provide a JSON object with two keys: 'title' for a concise title "
+					"summarizing the story, and 'story' for the narrative itself. "
+					"Do not include any additional commentary or explanations outside the JSON.\n\n"
+				)
+			else:  # style == "creative"
+				prompt = (
+					"Based on the following email, write a compelling and creative narrative story. "
+					"The story should capture the key events, decisions, and emotions of the people involved. "
+					"Feel free to add creative elements while staying true to the essence of the email. "
+					"In response, provide a JSON object with two keys: 'title' for a creative and engaging title "
+					"summarizing the story, and 'story' for the narrative itself. "
+					"Do not include any additional commentary or explanations outside the JSON.\n\n"
+				)
 			prompt += f"From: {row['from']}\nTo: {row['to']}\nSubject: {row['subject']}\nDate: {row['date']}\n\n{row['body']}\n\n---\n\n"
 
 			try:
 				result = ollama.generate(
 					model="llama3.2:3b",
 					prompt=prompt,
+					format="json",  # Request JSON output from Ollama
 					options={
-					"temperature": (0.2 if style == "factual" else
-					0.5),  # Lower temperature for less creativity, more factual output
-					"top_p": 0.5,  # Lower top_p to focus on highly probable tokens
-					},
-				)
+					"temperature": (0.2 if style == "factual" else 0.5),
+					"top_p": 0.5,
+					})
 
-				response = result.get("response", "")
-				if not response:
-					logger.warning(
-						f"No response generated for email with subject '{row['subject']}'. Skipping..."
-					)
-					continue
+				response_text = result.get("response", "")
+
+				if not response_text:
+					return None
+
+				try:
+					# Attempt to parse the response as JSON
+					parsed_response = json.loads(response_text)
+					if not parsed_response or "title" not in parsed_response or ("story"
+						not in parsed_response and "description" not in parsed_response):
+						continue
+					story_title = parsed_response.get("title", "No Title Generated")
+					if "story" in parsed_response:
+						story_content = parsed_response["story"].strip()
+					elif "description" in parsed_response:
+						story_content = parsed_response["description"].strip()
+					else:
+						story_content = response_text.strip()
+				except json.JSONDecodeError as e:
+					story_title = "Title could not be generated"
+					story_content = response_text.strip(
+					)  # Use raw response as story if parsing fails
 
 				stories.append({
 					"message_id": row["message_id"],
-					"story": response.strip(),
+					"title": story_title,
+					"story": story_content,
+					"related_emails": [row["message_id"]],
+					"email_count": 1,
+					"style": style,
 				})
 
 				i += 1
@@ -203,16 +266,19 @@ class StoryDevelopment:
 				save_error_log(
 					f"Error generating story for email with subject '{row['subject']}': {e}")
 
+		return stories
+
 	@staticmethod
-	def identify_key_actors(df: pd.DataFrame):
+	def identify_key_actors(df: pd.DataFrame, limit: Optional[int] = None):
 		"""
 		Identify key actors in the email data.
 
 		Args:
-						df (pd.DataFrame): DataFrame containing email data.
+			df (pd.DataFrame): DataFrame containing email data.
+			limit (Optional[int]): Maximum number of emails to process. If None, process all.
 
 		Returns:
-						list: List of key actors identified in the emails.
+			list: List of key actors identified in the emails.
 		"""
 		logger.info("Identifying key actors...")
 
@@ -229,9 +295,13 @@ class StoryDevelopment:
 		recipient_counts = Counter()
 		edge_weights = Counter()
 
+		i = 0
+
 		# Process each email with progress bar
 		logger.info("Processing emails to build actor network...")
 		for _, row in tqdm(df.iterrows(), total=len(df), desc="Building actor network"):
+			if limit is not None and i >= limit:
+				break
 			sender_emails = (re.findall(email_pattern, row["from"])
 				if row["from"] is not None else [])
 			recipient_emails = (re.findall(email_pattern, row["to"])
@@ -301,91 +371,108 @@ class StoryDevelopment:
 				},
 			}
 
-	def detect_significant_events(self, df: pd.DataFrame):
+	def detect_significant_events(self, df: pd.DataFrame, limit: Optional[int] = None):
 		"""
 		Detect significant events in the email data.
 
 		Args:
-						df (pd.DataFrame): DataFrame containing email data.
+			df (pd.DataFrame): DataFrame containing email data.
+			limit (Optional[int]): Maximum number of emails to process. If None, process all.
 
 		Returns:
-						list: List of significant events detected in the emails.
+			list: List of significant events detected in the emails.
 		"""
-		logger.info("Detecting significant events...")
+		try:
+			logger.info("Detecting significant events...")
 
-		# Count emails per day
-		logger.info("Counting emails per day...")
-		daily_counts = df.groupby(df["date"].dt.date).size()
+			# Count emails per day
+			logger.info("Counting emails per day...")
+			df = df.dropna(subset=["date"])
+			daily_counts = df.groupby(df["date"].dt.date).size()
 
-		# Calculate rolling statistics
-		logger.info("Calculating rolling statistics...")
-		rolling_mean = daily_counts.rolling(window=7, min_periods=1).mean()
-		rolling_std = daily_counts.rolling(window=7, min_periods=1).std()
+			# Calculate rolling statistics
+			logger.info("Calculating rolling statistics...")
+			rolling_mean = daily_counts.rolling(window=7, min_periods=1).mean()
+			rolling_std = daily_counts.rolling(window=7, min_periods=1).std()
 
-		# Identify spikes
-		logger.info("Identifying email volume spikes...")
-		threshold = 2
-		spikes = daily_counts[daily_counts > (rolling_mean + threshold * rolling_std)]
+			# Identify spikes
+			logger.info("Identifying email volume spikes...")
+			threshold = 2
+			spikes = daily_counts[daily_counts > (rolling_mean + threshold * rolling_std)]
 
-		# Extract events
-		events = []
-		logger.info("Analyzing detected events...")
-		for date, count in tqdm(spikes.items(), desc="Processing events"):
-			# Convert date to datetime for filtering
-			date = str(date)
-			event_date = pd.to_datetime(date)
+			# Extract events
+			events = []
+			logger.info("Analyzing detected events...")
+			i = 0
+			for date, count in tqdm(spikes.items(), desc="Processing events"):
+				try:
+					if limit is not None and i >= limit:
+						break
+					date = str(date)
+					event_date = pd.to_datetime(date)
 
-			# Get emails from the spike day
-			_date = pd.to_datetime(df["date"].dt.date)
-			event_emails = df[(_date >= event_date) & (_date < event_date + timedelta(days=1))]
+					# Get emails from the spike day
+					_date = pd.to_datetime(df["date"].dt.date)
+					event_emails = df[(_date >= event_date)
+						and (_date < event_date + timedelta(days=1))]
 
-			# Extract common words from these emails
-			if len(event_emails) > 0:
-				# Combine all text
-				all_text = " ".join(event_emails["body"].fillna(""))
+					# Extract common words from these emails
+					if len(event_emails) > 0:
+						# Combine all text
+						all_text = " ".join(event_emails["body"].fillna(""))
 
-				# Tokenize and count words
-				words = re.findall(r"\b\w+\b", all_text.lower())
-				words = [word for word in words if word not in custom_stop_words and len(word) > 2]
-				common_words = Counter(words).most_common(10)
+						# Tokenize and count words
+						words = re.findall(r"\b\w+\b", all_text.lower())
+						words = [
+							word for word in words
+							if word not in custom_stop_words and len(word) > 2
+						]
+						common_words = Counter(words).most_common(10)
 
-				# Get sample subjects
-				sample_subjects = event_emails["subject"].head(5).tolist()
+						# Get sample subjects
+						sample_subjects = event_emails["subject"].head(5).tolist()
 
-				events.append({
-					"date":
-					date,
-					"email_count":
-					count,
-					"normal_level":
-					rolling_mean[date],
-					"std_dev":
-					rolling_std[date],
-					"deviation": ((count - rolling_mean[date]) /
-					rolling_std[date] if rolling_std[date] > 0 else 0),
-					"common_words":
-					common_words,
-					"sample_subjects":
-					sample_subjects,
-					"email_ids":
-					event_emails.index.tolist(),
-				})
+						events.append({
+							"date":
+							date,
+							"email_count":
+							count,
+							"normal_level":
+							rolling_mean[date],
+							"std_dev":
+							rolling_std[date],
+							"deviation": ((count - rolling_mean[date]) /
+							rolling_std[date] if rolling_std[date] > 0 else 0),
+							"common_words":
+							common_words,
+							"sample_subjects":
+							sample_subjects,
+							"email_ids":
+							event_emails.index.tolist(),
+						})
+				except Exception as e:
+					continue
 
-		# Sort events by deviation
-		events.sort(key=lambda x: x["deviation"], reverse=True)
+			# Sort events by deviation
+			events.sort(key=lambda x: x["deviation"], reverse=True)
 
-		return events
+			return events
+		except Exception as e:
+			logger.error(f"Error detecting significant events: {e}")
+			save_error_log(f"Error detecting significant events: {e}")
+			return []
 
 	@staticmethod
-	def track_topics_over_time(analysis_results: pd.DataFrame):
+	def track_topics_over_time(analysis_results: pd.DataFrame, limit: Optional[int] = None):
 		"""
 		Track how topics evolve over time.
 
 		Args:
-						analysis_results (pd.DataFrame): DataFrame containing analysis results
+			analysis_results (pd.DataFrame): DataFrame containing analysis results
+			limit (Optional[int]): Maximum number of time periods to process. If None, process all.
 
 		Returns:
-						dict: Dictionary containing topic evolution data
+			dict: Dictionary containing topic evolution data
 		"""
 		logger.info("Tracking topics over time")
 
@@ -394,8 +481,11 @@ class StoryDevelopment:
 			logger.warning("No topic_label column found in analysis_results")
 			return {"time_periods": [], "topic_counts": {}, "topic_keywords": {}}
 
+		if limit is not None:
+			# Limit the analysis results to the specified number of rows
+			analysis_results = analysis_results.head(limit)
+
 		# Create time-based features
-		analysis_results["date"] = pd.to_datetime(analysis_results["date"], errors="coerce")
 		analysis_results["year"] = analysis_results["date"].dt.year
 		analysis_results["month"] = analysis_results["date"].dt.month
 		analysis_results["week"] = analysis_results["date"].dt.isocalendar().week
@@ -435,68 +525,39 @@ class StoryDevelopment:
 		busiest_day_count,
 		avg_response_time,
 	):
-		"""Generate a summary for a key actor story."""
-		# Create an engaging hook
+		"""Generate a summary for a key actor story using an LLM."""
 		name = actor.split("@")[0].replace(".", " ").title()
-		summary = f"Unveiling the Digital Footprint: The Enron Emails of {name}\n\n"
+		prompt = (
+			"Generate a concise and insightful summary about a key person based on the following data. "
+			"The summary should be a narrative that highlights their role, communication patterns, and key areas of focus. "
+			"Provide the output in a JSON object with a single key: 'summary'.\n\n"
+			f"Person's Name: {name}\n"
+			f"Email Address: {actor}\n"
+			f"Metrics: {json.dumps(metrics, indent=2)}\n"
+			f"Commonly Used Words: {json.dumps(common_words, indent=2)}\n"
+			f"Busiest Day: {busiest_day} (with {busiest_day_count} emails)\n"
+			f"Average Response Time: {avg_response_time} hours\n\n"
+			"Generate the JSON summary now.")
 
-		# Add role and influence context
-		influence_score = (metrics.get("degree_centrality", 0) +
-			metrics.get("betweenness_centrality", 0) + metrics.get("pagerank", 0)) / 3
-		influence_level = ("highly influential" if influence_score > 0.1 else
-			"moderately influential" if influence_score > 0.05 else "influential")
-		summary += f"In the intricate web of Enron's corporate communications, {name} emerges as a {influence_level} figure, "
-		summary += f"having sent {metrics['sent']} emails and received {metrics['received']} emails. "
-
-		# Add communication patterns with context
-		summary += f"\n\nCommunication Patterns:\n"
-		summary += f"• Peak Activity: {name} is most active on {busiest_day}s, sending {busiest_day_count} emails. "
-		if avg_response_time:
-			response_context = ("remarkably quick"
-				if avg_response_time < 4 else "moderate" if avg_response_time < 8 else "deliberate")
-			summary += f"This suggests a {response_context} response pattern, with an average response time of {avg_response_time:.1f} hours. "
-
-		# Add topic analysis with deeper context
-		summary += f"\n\nKey Focus Areas:\n"
-		top_topics = [word for word, _ in common_words[:5]]
-		topic_counts = [count for _, count in common_words[:5]]
-		topic_analysis = []
-		for topic, count in zip(top_topics, topic_counts):
-			if topic.lower() in ["energy", "power", "gas"]:
-				topic_analysis.append(f"energy sector operations ({count} mentions)")
-			elif topic.lower() in ["state", "regulatory", "policy"]:
-				topic_analysis.append(f"regulatory affairs ({count} mentions)")
-			elif topic.lower() in ["market", "trading", "price"]:
-				topic_analysis.append(f"market activities ({count} mentions)")
-			else:
-				topic_analysis.append(f"{topic} ({count} mentions)")
-
-		summary += f"• Primary Focus: {', '.join(topic_analysis[:-1])}, and {topic_analysis[-1]}. "
-
-		# Add network analysis
-		summary += f"\n\nNetwork Impact:\n"
-		summary += f"• Influence Score: {influence_score:.3f} (combining centrality measures)\n"
-		summary += f"• Communication Reach: {metrics.get('degree_centrality', 0):.3f} (direct connections)\n"
-		summary += f"• Information Flow: {metrics.get('betweenness_centrality', 0):.3f} (brokerage role)\n"
-		summary += f"• Overall Importance: {metrics.get('pagerank', 0):.3f} (network-wide significance)"
-
-		# Add temporal analysis
-		summary += f"\n\nTemporal Patterns:\n"
-		if busiest_day_count > 10:
-			summary += f"• High Activity: {name} shows intense engagement on {busiest_day}s, suggesting this day may be crucial for weekly operations or reporting.\n"
-		if avg_response_time and avg_response_time < 4:
-			summary += f"• Quick Response: The rapid response time indicates a key operational role or high-priority communications.\n"
-
-		# Add concluding insights
-		summary += f"\n\nKey Insights:\n"
-		if influence_score > 0.1:
-			summary += f"• {name} plays a central role in Enron's communication network, acting as a key information hub.\n"
-		if any("energy" in topic.lower() for topic in top_topics):
-			summary += f"• Strong focus on energy sector operations suggests involvement in core business activities.\n"
-		if avg_response_time and avg_response_time < 4:
-			summary += f"• Quick response times indicate a hands-on role in critical communications.\n"
-
-		return summary
+		try:
+			result = ollama.generate(
+				model="llama3.2:3b",
+				prompt=prompt,
+				format="json",
+				options={
+				"temperature": 0.3,
+				"top_p": 0.5
+				},
+			)
+			response_text = result.get("response", "")
+			if response_text:
+				parsed_response = json.loads(response_text)
+				return parsed_response.get("summary", "Summary could not be generated.")
+			return "Summary could not be generated."
+		except Exception as e:
+			logger.error(f"Error generating actor summary for {actor}: {e}")
+			save_error_log(f"Error generating actor summary for {actor}: {e}")
+			return f"Error generating summary for {actor}. See logs for details."
 
 	@staticmethod
 	def _generate_event_summary(
@@ -506,60 +567,36 @@ class StoryDevelopment:
 		common_words,
 		event_metrics,
 	):
-		"""Generate a summary for a significant event story."""
-		# Create an engaging hook
-		summary = f"Unusual Activity Detected: Email Surge on {date}\n\n"
+		"""Generate a summary for a significant event story using an LLM."""
+		prompt = (
+			"Generate a concise and insightful summary about a significant event based on the following data. "
+			"The summary should be a narrative that explains the event's significance, participant engagement, and key topics. "
+			"Provide the output in a JSON object with a single key: 'summary'.\n\n"
+			f"Event Date: {date}\n"
+			f"Email Count: {email_count} (Deviation: {deviation:.1f} std devs above normal)\n"
+			f"Commonly Used Words: {json.dumps(common_words, indent=2)}\n"
+			f"Event Metrics: {json.dumps(event_metrics, indent=2)}\n\n"
+			"Generate the JSON summary now.")
 
-		# Add event significance
-		significance_level = ("extremely significant"
-			if deviation > 3 else "highly significant" if deviation > 2 else "significant")
-		summary += f"A {significance_level} spike in email activity was detected, with {email_count} emails exchanged "
-		summary += f"({deviation:.1f} standard deviations above normal). "
-
-		# Add participant analysis
-		summary += f"\n\nParticipant Analysis:\n"
-		summary += f"• Scale: {event_metrics['participant_count']} individuals were involved in this communication surge\n"
-		summary += f"• Engagement: Average email length of {event_metrics['avg_email_length']:.0f} characters suggests "
-		summary += f"{'detailed discussions' if event_metrics['avg_email_length'] > 500 else 'brief exchanges'}\n"
-		summary += (f"• Interaction: Reply rate of {event_metrics['reply_rate']:.1%} indicates ")
-		summary += f"{'highly interactive' if event_metrics['reply_rate'] > 0.5 else 'moderate'} communication patterns"
-
-		# Add topic analysis
-		summary += f"\n\nKey Topics:\n"
-		top_words = [word for word, _ in common_words[:5]]
-		word_counts = [count for _, count in common_words[:5]]
-		topic_analysis = []
-		for word, count in zip(top_words, word_counts):
-			if word.lower() in ["urgent", "emergency", "critical"]:
-				topic_analysis.append(f"urgent matters ({count} mentions)")
-			elif word.lower() in ["meeting", "conference", "call"]:
-				topic_analysis.append(f"coordination activities ({count} mentions)")
-			elif word.lower() in ["report", "update", "status"]:
-				topic_analysis.append(f"status updates ({count} mentions)")
-			else:
-				topic_analysis.append(f"{word} ({count} mentions)")
-
-		summary += f"• Primary Focus: {', '.join(topic_analysis[:-1])}, and {topic_analysis[-1]}\n"
-
-		# Add temporal context
-		summary += f"\n\nTemporal Context:\n"
-		if deviation > 3:
-			summary += f"• Exceptional Activity: This spike represents one of the most significant communication events in the dataset\n"
-		if event_metrics["reply_rate"] > 0.7:
-			summary += f"• Rapid Response: The high reply rate suggests urgent or time-sensitive matters were being discussed\n"
-		if event_metrics["avg_email_length"] > 1000:
-			summary += f"• Detailed Communication: The lengthy emails indicate complex or important discussions\n"
-
-		# Add potential implications
-		summary += f"\n\nPotential Implications:\n"
-		if any(word.lower() in ["urgent", "emergency", "critical"] for word in top_words):
-			summary += f"• This event may represent a critical business situation requiring immediate attention\n"
-		if event_metrics["participant_count"] > 10:
-			summary += f"• The large number of participants suggests a company-wide or department-wide communication event\n"
-		if event_metrics["reply_rate"] > 0.5:
-			summary += f"• The high level of interaction indicates active problem-solving or decision-making\n"
-
-		return summary
+		try:
+			result = ollama.generate(
+				model="llama3.2:3b",
+				prompt=prompt,
+				format="json",
+				options={
+				"temperature": 0.3,
+				"top_p": 0.5
+				},
+			)
+			response_text = result.get("response", "")
+			if response_text:
+				parsed_response = json.loads(response_text)
+				return parsed_response.get("summary", "Summary could not be generated.")
+			return "Summary could not be generated."
+		except Exception as e:
+			logger.error(f"Error generating event summary for {date}: {e}")
+			save_error_log(f"Error generating event summary for {date}: {e}")
+			return f"Error generating summary for {date}. See logs for details."
 
 	@staticmethod
 	def _analyze_topic_trend(topic_counts, topic_num):
@@ -601,70 +638,56 @@ class StoryDevelopment:
 		keywords,
 		topic_trend,
 	):
-		"""Generate a summary for a topic evolution story."""
-		# Create an engaging hook
-		summary = f"Topic Evolution: {topic_id}\n\n"
+		"""Generate a summary for a topic evolution story using an LLM."""
+		prompt = (
+			"Generate a concise and insightful summary about a topic's evolution based on the following data. "
+			"The summary should be a narrative that explains the topic's trend, peak activity, and key characteristics. "
+			"Provide the output in a JSON object with a single key: 'summary'.\n\n"
+			f"Topic ID: {topic_id}\n"
+			f"Keywords: {json.dumps(keywords, indent=2)}\n"
+			f"Topic Trend: {json.dumps(topic_trend, indent=2)}\n\n"
+			"Generate the JSON summary now.")
 
-		# Add topic overview
-		summary += (f"Analysis of communication patterns reveals the evolution of {topic_id}, ")
-		summary += f"characterized by keywords such as {', '.join(keywords[:3])}. "
+		try:
+			result = ollama.generate(
+				model="llama3.2:3b",
+				prompt=prompt,
+				format="json",
+				options={
+				"temperature": 0.3,
+				"top_p": 0.5
+				},
+			)
+			response_text = result.get("response", "")
+			if response_text:
+				parsed_response = json.loads(response_text)
+				return parsed_response.get("summary", "Summary could not be generated.")
+			return "Summary could not be generated."
+		except Exception as e:
+			logger.error(f"Error generating topic summary for {topic_id}: {e}")
+			save_error_log(f"Error generating topic summary for {topic_id}: {e}")
+			return f"Error generating summary for {topic_id}. See logs for details."
 
-		# Add trend analysis
-		summary += f"\n\nTrend Analysis:\n"
-		trend_character = {
-			"increasing": "growing",
-			"decreasing": "declining",
-			"stable": "consistent",
-		}.get(topic_trend["trend"], "variable")
-
-		summary += f"• Overall Trend: {trend_character} interest in this topic\n"
-		if topic_trend["peak_period"]:
-			summary += f"• Peak Activity: {topic_trend['peak_count']} mentions during {topic_trend['peak_period']}\n"
-
-		# Add keyword analysis
-		summary += f"\n\nKeyword Analysis:\n"
-		keyword_categories = {
-			"energy": "energy sector",
-			"power": "power operations",
-			"gas": "gas operations",
-			"market": "market activities",
-			"trading": "trading operations",
-			"price": "pricing",
-			"state": "regulatory affairs",
-			"regulatory": "regulatory matters",
-			"policy": "policy issues",
-		}
-
-		categorized_keywords = []
-		for keyword in keywords[:5]:
-			category = next((v for k, v in keyword_categories.items() if k in keyword.lower()),
-				None)
-			if category:
-				categorized_keywords.append(f"{category} ({keyword})")
-			else:
-				categorized_keywords.append(keyword)
-
-		summary += f"• Primary Focus: {', '.join(categorized_keywords[:-1])}, and {categorized_keywords[-1]}\n"
-
-		# Add temporal patterns
-		summary += f"\n\nTemporal Patterns:\n"
-		if topic_trend["trend"] == "increasing":
-			summary += (f"• Growing Interest: The topic shows increasing relevance over time\n")
-		elif topic_trend["trend"] == "decreasing":
-			summary += f"• Declining Focus: The topic shows decreasing prominence\n"
-		else:
-			summary += f"• Stable Presence: The topic maintains consistent attention\n"
-
-		# Add potential implications
-		summary += f"\n\nPotential Implications:\n"
-		if topic_trend["trend"] == "increasing":
-			summary += (f"• This topic may represent an emerging area of focus or concern\n")
-		if topic_trend["peak_count"] > 50:
-			summary += (f"• The high peak activity suggests significant business impact\n")
-		if any(kw.lower() in ["urgent", "critical", "emergency"] for kw in keywords):
-			summary += (f"• The presence of urgent keywords indicates time-sensitive matters\n")
-
-		return summary
+	@staticmethod
+	def _clean_for_json(obj):
+		"""Recursively clean data for JSON serialization."""
+		if isinstance(obj, dict):
+			return {k: StoryDevelopment._clean_for_json(v) for k, v in obj.items()}
+		if isinstance(obj, list):
+			return [StoryDevelopment._clean_for_json(i) for i in obj]
+		if pd.isna(obj):
+			return None
+		if isinstance(obj, (datetime, pd.Timestamp)):
+			return obj.isoformat()
+		if isinstance(obj, timedelta):
+			return str(obj)
+		if isinstance(obj, np.integer):
+			return int(obj)
+		if isinstance(obj, np.floating):
+			return float(obj)
+		if isinstance(obj, np.ndarray):
+			return obj.tolist()
+		return obj
 
 	def generate_summaries(
 		self,
@@ -677,13 +700,13 @@ class StoryDevelopment:
 		Generate summaries based on key actors and significant events.
 
 		Args:
-						analysis_result (pd.DataFrame): DataFrame containing analysis results.
-						key_actors (dict): Dictionary of key actors identified in the emails.
-						significant_events (list): List of significant events detected in the emails.
-						topic_evolution (dict): Dictionary containing topic evolution data.
+			analysis_result (pd.DataFrame): DataFrame containing analysis results.
+			key_actors (dict): Dictionary of key actors identified in the emails.
+			significant_events (list): List of significant events detected in the emails.
+			topic_evolution (dict): Dictionary containing topic evolution data.
 
 		Returns:
-						list: List of summaries generated from the email data.
+			list: List of summaries generated from the email data.
 		"""
 		logger.info("Generating summaries...")
 
@@ -692,229 +715,243 @@ class StoryDevelopment:
 		# 1. Stories based on key actors
 		if key_actors and "top_actors" in key_actors:
 			for actor, metrics in list(key_actors["top_actors"].items())[:5]:
-				# Get emails sent by this actor
-				actor_emails = analysis_result[analysis_result["from"].str.contains(actor,
-					na=False)]
+				try:
+					# Get emails sent by this actor
+					actor_emails = analysis_result[analysis_result["from"].str.contains(actor,
+						na=False)]
 
-				if len(actor_emails) > 0:
-					# Get related emails (emails in threads where actor participated)
+					if len(actor_emails) > 0:
+						# Get related emails (emails in threads where actor participated)
+						related_emails = []
+						for _, email in actor_emails.iterrows():
+							try:
+								thread_emails = analysis_result[
+									analysis_result["subject"].str.contains(email["subject"],
+									na=False,
+									regex=False)]
+								for _, thread_email in thread_emails.iterrows():
+									message_id = thread_email.get("message_id", None)
+									if message_id is not None and message_id not in related_emails:
+										related_emails.append(message_id)
+							except Exception as e:
+								logger.error(
+									f"Error processing email thread for {email['subject']}: {e}")
+								save_error_log(
+									f"Error processing email thread for {email['subject']}: {e}")
+
+						# Use clean_body column if available, otherwise use body
+						text_column = ("clean_body"
+							if "clean_body" in actor_emails.columns else "body")
+						all_text = " ".join(actor_emails[text_column].fillna(""))
+						words = re.findall(r"\b\w+\b", all_text.lower())
+						words = [
+							word for word in words
+							if word not in custom_stop_words and len(word) > 2
+						]
+						common_words = Counter(words).most_common(20)
+						sample_subjects = actor_emails["subject"].head(5).tolist()
+
+						daily_patterns = actor_emails.groupby(
+							actor_emails["date"].dt.day_name()).size()
+						busiest_day = daily_patterns.idxmax()
+						busiest_day_count = daily_patterns.max()
+
+						# Calculate average response time
+						response_times = []
+						for _, email in actor_emails.iterrows():
+							try:
+								if pd.notna(email["date"]):
+									subject_to_match = (email["subject"][0]
+										if isinstance(email["subject"], list)
+										and len(email["subject"]) > 0 else email["subject"])
+									replies = analysis_result[(analysis_result["subject"].str.
+										contains(subject_to_match, na=False, regex=False))
+										& (analysis_result["date"] > email["date"])]
+									if not replies.empty:
+										response_time = (replies["date"].min() -
+											email["date"]).total_seconds() / 3600
+										response_times.append(response_time)
+							except Exception as e:
+								logger.error(
+									f"Error calculating response time for email {email['subject']}: {e}"
+								)
+								save_error_log(
+									f"Error calculating response time for email {email['subject']}: {e}"
+								)
+
+						avg_response_time = (np.mean(response_times) if response_times else None)
+
+						story = {
+							"title":
+							f"The Story of {actor}",
+							"type":
+							"key_actor",
+							"actor":
+							actor,
+							"metrics":
+							metrics,
+							"common_topics":
+							common_words,
+							"sample_subjects":
+							sample_subjects,
+							"communication_patterns": {
+							"busiest_day":
+							busiest_day,
+							"busiest_day_count":
+							int(busiest_day_count),
+							"avg_response_time":
+							(f"{avg_response_time:.1f} hours" if avg_response_time else "N/A"),
+							},
+							"related_emails":
+							related_emails,
+							"summary":
+							self._generate_actor_summary(
+							actor,
+							self._clean_for_json(metrics),
+							self._clean_for_json(common_words),
+							busiest_day,
+							int(busiest_day_count),
+							avg_response_time,
+							),
+						}
+						summaries.append(story)
+				except Exception as e:
+					logger.error(f"Error processing key actors: {e}")
+					save_error_log(f"Error processing key actors: {e}")
+
+			# 2. Stories based on significant events
+			for event in significant_events[:5]:
+				try:
+					event_date = event["date"]
+					event_emails = analysis_result[(pd.to_datetime(analysis_result["date"].dt.date)
+						>= pd.to_datetime(event_date))
+						and (pd.to_datetime(analysis_result["date"].dt.date) <
+						pd.to_datetime(event_date) + timedelta(days=1))]
+
+					# Get all related emails (including replies and forwards)
 					related_emails = []
-					for _, email in actor_emails.iterrows():
+					for _, email in event_emails.iterrows():
+						# Get emails in the same thread
 						thread_emails = analysis_result[analysis_result["subject"].str.contains(
 							email["subject"], na=False)]
 						for _, thread_email in thread_emails.iterrows():
-							related_emails.append({
-								"subject":
-								thread_email["subject"],
-								"date":
-								thread_email["date"],
-								"from":
-								thread_email["from"],
-								"to":
-								thread_email["to"],
-								"body_preview": (thread_email["body"][:200] +
-								"..." if len(thread_email["body"]) > 200 else thread_email["body"]),
-							})
+							message_id = thread_email.get("message_id", None)
+							if message_id is not None and message_id not in related_emails:
+								related_emails.append(message_id)
 
-					# Use clean_body column if available, otherwise use body
-					text_column = ("clean_body" if "clean_body" in actor_emails.columns else "body")
-					all_text = " ".join(actor_emails[text_column].fillna(""))
-					words = re.findall(r"\b\w+\b", all_text.lower())
-					words = [
-						word for word in words if word not in custom_stop_words and len(word) > 2
-					]
-					common_words = Counter(words).most_common(20)
-					sample_subjects = actor_emails["subject"].head(5).tolist()
+					# Analyze event participants
+					participants = set()
+					for _, email in event_emails.iterrows():
+						if pd.notna(email["from"]):
+							participants.update(re.findall(r"[\w\.-]+@[\w\.-]+", email["from"]))
+						if pd.notna(email["to"]):
+							participants.update(re.findall(r"[\w\.-]+@[\w\.-]+", email["to"]))
 
-					# Calculate communication patterns
-					daily_patterns = actor_emails.groupby(actor_emails["date"].dt.day_name()).size()
-					busiest_day = daily_patterns.idxmax()
-					busiest_day_count = daily_patterns.max()
-
-					# Calculate average response time
-					response_times = []
-					for _, email in actor_emails.iterrows():
-						if pd.notna(email["date"]):
-							replies = analysis_result[(
-								analysis_result["subject"].str.contains(email["subject"], na=False))
-								& (analysis_result["date"] > email["date"])]
-							if not replies.empty:
-								response_time = (replies["date"].min() -
-									email["date"]).total_seconds() / 3600
-								response_times.append(response_time)
-
-					avg_response_time = (np.mean(response_times) if response_times else None)
+					# Calculate event metrics
+					event_metrics = {
+						"participant_count":
+						len(participants),
+						"avg_email_length":
+						event_emails["body"].str.len().mean(),
+						"reply_rate":
+						len(event_emails[event_emails["subject"].str.contains("Re:", na=False)]) /
+						len(event_emails),
+					}
 
 					story = {
 						"title":
-						f"The Story of {actor}",
+						f"Significant Event on {event_date}",
 						"type":
-						"key_actor",
-						"actor":
-						actor,
-						"metrics":
-						metrics,
-						"common_topics":
-						common_words,
+						"significant_event",
+						"date":
+						event_date,
+						"email_count":
+						event["email_count"],
+						"common_words":
+						event["common_words"],
 						"sample_subjects":
-						sample_subjects,
-						"communication_patterns": {
-						"busiest_day":
-						busiest_day,
-						"busiest_day_count":
-						int(busiest_day_count),
-						"avg_response_time":
-						(f"{avg_response_time:.1f} hours" if avg_response_time else "N/A"),
-						},
+						event["sample_subjects"],
+						"event_metrics":
+						event_metrics,
+						"participants":
+						list(participants),
 						"related_emails":
 						related_emails,
 						"summary":
-						self._generate_actor_summary(
-						actor,
-						metrics,
-						common_words,
-						busiest_day,
-						busiest_day_count,
-						avg_response_time,
+						self._generate_event_summary(
+						event_date,
+						event["email_count"],
+						event["deviation"],
+						self._clean_for_json(event["common_words"]),
+						self._clean_for_json(event_metrics),
 						),
 					}
 					summaries.append(story)
+				except Exception as e:
+					logger.error(f"Error processing significant event {event['date']}: {e}")
 
-		# 2. Stories based on significant events
-		for event in significant_events[:5]:
-			event_date = event["date"]
-			event_emails = analysis_result[
-				(pd.to_datetime(analysis_result["date"].dt.date) >= pd.to_datetime(event_date))
-				& (pd.to_datetime(analysis_result["date"].dt.date) < pd.to_datetime(event_date) +
-				timedelta(days=1))]
+			# 3. Stories based on topic evolution
+			if topic_evolution and "topic_keywords" in topic_evolution:
+				for topic_id, keywords in list(topic_evolution["topic_keywords"].items())[:5]:
+					# Get emails related to this topic
+					topic_emails = []
+					try:
+						for keyword in keywords[:5]:  # Use top 5 keywords
+							keyword_emails = analysis_result[analysis_result["body"].str.contains(
+								keyword, case=False, na=False)]
+							for _, email in keyword_emails.iterrows():
+								topic_emails.append({
+									"subject": email["subject"],
+									"date": email["date"],
+									"from": email["from"],
+									"to": email["to"],
+									"body": email["body"],
+									"matching_keyword": keyword,
+								})
 
-			# Get all related emails (including replies and forwards)
-			related_emails = []
-			for _, email in event_emails.iterrows():
-				# Get emails in the same thread
-				thread_emails = analysis_result[analysis_result["subject"].str.contains(
-					email["subject"], na=False)]
-				for _, thread_email in thread_emails.iterrows():
-					related_emails.append({
-						"subject":
-						thread_email["subject"],
-						"date":
-						thread_email["date"],
-						"from":
-						thread_email["from"],
-						"to":
-						thread_email["to"],
-						"body_preview": (thread_email["body"][:200] +
-						"..." if len(thread_email["body"]) > 200 else thread_email["body"]),
-					})
+						# Extract topic number
+						topic_num = int(topic_id.split()[-1])
 
-			# Analyze event participants
-			participants = set()
-			for _, email in event_emails.iterrows():
-				if pd.notna(email["from"]):
-					participants.update(re.findall(r"[\w\.-]+@[\w\.-]+", email["from"]))
-				if pd.notna(email["to"]):
-					participants.update(re.findall(r"[\w\.-]+@[\w\.-]+", email["to"]))
+						# Get topic evolution data
+						topic_counts = topic_evolution.get("topic_counts", {})
+						topic_trend = self._analyze_topic_trend(topic_counts, topic_num)
 
-			# Calculate event metrics
-			event_metrics = {
-				"participant_count":
-				len(participants),
-				"avg_email_length":
-				event_emails["body"].str.len().mean(),
-				"reply_rate":
-				len(event_emails[event_emails["subject"].str.contains("Re:", na=False)]) /
-				len(event_emails),
-			}
+						story = {
+							"title":
+							f"The Evolution of {topic_id}",
+							"type":
+							"topic_evolution",
+							"topic_id":
+							topic_id,
+							"keywords":
+							keywords,
+							"topic_metrics": {
+							"trend": topic_trend["trend"],
+							"peak_period": topic_trend["peak_period"],
+							"peak_count": topic_trend["peak_count"],
+							},
+							"related_emails":
+							topic_emails,
+							"summary":
+							self._generate_topic_summary(
+							topic_id,
+							self._clean_for_json(keywords),
+							self._clean_for_json(topic_trend),
+							),
+						}
+						summaries.append(story)
+					except Exception as e:
+						logger.error(f"Error processing topic {topic_id}: {e}")
+						save_error_log(f"Error processing topic {topic_id}: {e}")
 
-			story = {
-				"title":
-				f"Significant Event on {event_date}",
-				"type":
-				"significant_event",
-				"date":
-				event_date,
-				"email_count":
-				event["email_count"],
-				"common_words":
-				event["common_words"],
-				"sample_subjects":
-				event["sample_subjects"],
-				"event_metrics":
-				event_metrics,
-				"participants":
-				list(participants),
-				"related_emails":
-				related_emails,
-				"summary":
-				self._generate_event_summary(
-				event_date,
-				event["email_count"],
-				event["deviation"],
-				event["common_words"],
-				event_metrics,
-				),
-			}
-			summaries.append(story)
-
-		# 3. Stories based on topic evolution
-		if topic_evolution and "topic_keywords" in topic_evolution:
-			for topic_id, keywords in list(topic_evolution["topic_keywords"].items())[:5]:
-				# Get emails related to this topic
-				topic_emails = []
-				for keyword in keywords[:5]:  # Use top 5 keywords
-					keyword_emails = analysis_result[analysis_result["body"].str.contains(keyword,
-						case=False,
-						na=False)]
-					for _, email in keyword_emails.iterrows():
-						topic_emails.append({
-							"subject":
-							email["subject"],
-							"date":
-							email["date"],
-							"from":
-							email["from"],
-							"to":
-							email["to"],
-							"body_preview": (email["body"][:200] +
-							"..." if len(email["body"]) > 200 else email["body"]),
-							"matching_keyword":
-							keyword,
-						})
-
-				# Extract topic number
-				topic_num = int(topic_id.split()[-1])
-
-				# Get topic evolution data
-				topic_counts = topic_evolution.get("topic_counts", {})
-				topic_trend = self._analyze_topic_trend(topic_counts, topic_num)
-
-				story = {
-					"title": f"The Evolution of {topic_id}",
-					"type": "topic_evolution",
-					"topic_id": topic_id,
-					"keywords": keywords,
-					"topic_metrics": {
-					"trend": topic_trend["trend"],
-					"peak_period": topic_trend["peak_period"],
-					"peak_count": topic_trend["peak_count"],
-					},
-					"related_emails": topic_emails,
-					"summary": self._generate_topic_summary(
-					topic_id,
-					keywords,
-					topic_trend,
-					),
-				}
-				summaries.append(story)
-
-		return summaries
+			return summaries
 
 	def develop_story(
 		self,
 		processed_data: Optional[pd.DataFrame],
 		analysis_results: Optional[pd.DataFrame],
 		limit: Optional[int] = None,
+		db_manager: Optional[DatabaseManager] = None,
 	):
 		"""
 		Generate a story based on processed data and analysis results.
@@ -957,6 +994,19 @@ class StoryDevelopment:
 
 			logger.info(f"Developing stories from {len(analysis_results)} analysis results.")
 
+			processed_data = sort_emails_by_date(processed_data)
+			analysis_results = sort_emails_by_date(analysis_results)
+
+			processed_data["date"] = pd.to_datetime(processed_data["date"], errors="coerce")
+			analysis_results["date"] = pd.to_datetime(analysis_results["date"], errors="coerce")
+
+			# check if analysis_results has NaN values in 'date' column
+			if analysis_results["date"].isna().any():
+				logger.warning(
+					"Analysis results contain NaN values in 'date' column. Attempting to clean data."
+				)
+				analysis_results = analysis_results.dropna(subset=["date"])
+
 			num_threads = max(os.cpu_count() or 1, 4)
 			with FutureExecutor(max_workers=num_threads) as executor:
 				futures = {
@@ -965,7 +1015,7 @@ class StoryDevelopment:
 					self.generate_stories_from_threads,
 					analysis_results,
 					limit=limit,
-					style="creative",
+					style="factual",
 					),
 					"stories_from_non_threads":
 					executor.submit(
@@ -974,12 +1024,26 @@ class StoryDevelopment:
 					limit=limit,
 					style="factual",
 					),
+					"stories_from_threads_creative":
+					executor.submit(
+					self.generate_stories_from_threads,
+					analysis_results,
+					limit=limit,
+					style="creative",
+					),
+					"stories_from_non_threads_creative":
+					executor.submit(
+					self.generate_non_threaded_stories,
+					analysis_results,
+					limit=limit,
+					style="creative",
+					),
 					"identify_key_actors":
-					executor.submit(self.identify_key_actors, processed_data),
+					executor.submit(self.identify_key_actors, processed_data, limit=limit),
 					"detect_significant_events":
-					executor.submit(self.detect_significant_events, processed_data),
+					executor.submit(self.detect_significant_events, processed_data, limit=limit),
 					"track_topics_over_time":
-					executor.submit(self.track_topics_over_time, analysis_results),
+					executor.submit(self.track_topics_over_time, analysis_results, limit=limit),
 				}
 
 			results = {}
@@ -994,6 +1058,66 @@ class StoryDevelopment:
 
 			threaded_stories = results.get("stories_from_threads", [])
 			non_threaded_stories = results.get("stories_from_non_threads", [])
+			threaded_stories_creative = results.get("stories_from_threads_creative", [])
+			non_threaded_stories_creative = results.get("stories_from_non_threads_creative", [])
+
+			# Save stories to JSON files
+			story_outputs = {
+				"threaded_stories": threaded_stories,
+				"non_threaded_stories": non_threaded_stories,
+				"threaded_stories_creative": threaded_stories_creative,
+				"non_threaded_stories_creative": non_threaded_stories_creative,
+			}
+
+			for name, story_data in story_outputs.items():
+				if story_data:
+					file_path = os.path.join(
+						self.output_dir, f"{name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+					with open(file_path, "w", encoding="utf-8") as f:
+						json.dump(self._clean_for_json(story_data), f, ensure_ascii=False, indent=4)
+					logger.info(f"{name.replace('_', ' ').title()} saved to {file_path}")
+
+			# Save stories to database
+			all_threaded_stories = threaded_stories + threaded_stories_creative
+			if all_threaded_stories:
+				threaded_stories_df = pd.DataFrame(all_threaded_stories)
+				threaded_stories_df['related_emails'] = threaded_stories_df['related_emails'].apply(
+					lambda x: json.dumps(self._clean_for_json(x)) if x else None)
+				if db_manager is not None:
+					db_manager.insert_from_dataframe(threaded_stories_df,
+						"threaded_stories",
+						columns=[
+						"thread_id",
+						"style",
+						"title",
+						"story",
+						"related_emails",
+						"email_count",
+						])
+					logger.info(
+						f"Inserted {len(threaded_stories_df)} threaded stories into the database.")
+
+			all_non_threaded_stories = non_threaded_stories + non_threaded_stories_creative
+			if all_non_threaded_stories:
+				non_threaded_stories_df = pd.DataFrame(all_non_threaded_stories)
+				non_threaded_stories_df['related_emails'] = non_threaded_stories_df[
+					'related_emails'].apply(lambda x: json.dumps(self._clean_for_json(x))
+					if x else None)
+				if db_manager is not None:
+					db_manager.insert_from_dataframe(non_threaded_stories_df,
+						"non_threaded_stories",
+						columns=[
+						"message_id",
+						"style",
+						"title",
+						"story",
+						"related_emails",
+						"email_count",
+						])
+					logger.info(
+						f"Inserted {len(non_threaded_stories_df)} non-threaded stories into the database."
+					)
+
 			key_actors = results.get("identify_key_actors", {})
 			significant_events = results.get("detect_significant_events", [])
 			topic_evolution = results.get("track_topics_over_time", {})
@@ -1016,5 +1140,99 @@ class StoryDevelopment:
 			)
 			logger.info(f"Generated {len(summaries)} summaries.")
 
+			# Save summaries to JSON file
+			if summaries:
+				summaries_file = os.path.join(
+					self.output_dir, f"summaries_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+				with open(summaries_file, "w", encoding="utf-8") as f:
+					json.dump(self._clean_for_json(summaries), f, ensure_ascii=False, indent=4)
+				logger.info(f"Summaries saved to {summaries_file}")
+
+			# Save summaries to database
+			if summaries and db_manager is not None:
+				summaries_for_db = []
+				for s in summaries:
+					summary_id = str(uuid.uuid4())
+					original_id = None
+					summary_metadata = {}
+
+					if s["type"] == "key_actor":
+						original_id = s.get("actor")
+						summary_metadata = {
+							"metrics": s.get("metrics"),
+							"common_topics": s.get("common_topics"),
+							"sample_subjects": s.get("sample_subjects"),
+							"communication_patterns": s.get("communication_patterns"),
+							"related_emails": s.get("related_emails"),
+						}
+					elif s["type"] == "significant_event":
+						original_id = s.get("date")
+						summary_metadata = {
+							"email_count": s.get("email_count"),
+							"common_words": s.get("common_words"),
+							"sample_subjects": s.get("sample_subjects"),
+							"event_metrics": s.get("event_metrics"),
+							"participants": s.get("participants"),
+							"related_emails": s.get("related_emails"),
+						}
+					elif s["type"] == "topic_evolution":
+						original_id = s.get("topic_id")
+						summary_metadata = {
+							"keywords": s.get("keywords"),
+							"topic_metrics": s.get("topic_metrics"),
+							"related_emails": s.get("related_emails"),
+						}
+
+					summaries_for_db.append({
+						"summary_id":
+						summary_id,
+						"original_id":
+						original_id,
+						"summary_title":
+						s.get("title"),
+						"summary_content":
+						s.get("summary"),
+						"summary_type":
+						s.get("type"),
+						"summary_metadata":
+						json.dumps(self._clean_for_json(summary_metadata)),
+					})
+
+				summaries_df = pd.DataFrame(summaries_for_db)
+				db_manager.insert_from_dataframe(
+					summaries_df,
+					"summaries",
+					columns=[
+					"summary_id",
+					"original_id",
+					"summary_title",
+					"summary_content",
+					"summary_type",
+					"summary_metadata",
+					],
+				)
+				logger.info(f"Inserted {len(summaries_df)} summaries into the database.")
+
+			return {
+				"threaded_stories": threaded_stories,
+				"non_threaded_stories": non_threaded_stories,
+				"threaded_stories_creative": threaded_stories_creative,
+				"non_threaded_stories_creative": non_threaded_stories_creative,
+				"key_actors": key_actors,
+				"significant_events": significant_events,
+				"topic_evolution": topic_evolution,
+				"summaries": summaries,
+			}
+
 		except Exception as e:
 			logger.error(f"Error generating story: {e}")
+
+
+if __name__ == "__main__":
+	# Example usage
+	story_dev = StoryDevelopment(
+		processed_data_dir="path/to/processed/data",
+		analysis_results_dir="path/to/analysis/results",
+		output_dir="path/to/output",
+	)
+	story_dev.develop_story(None, None, limit=100)

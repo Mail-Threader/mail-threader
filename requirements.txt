@@ -23,6 +23,10 @@ clean-text>=0.6.0
 firebase-admin
 gliner>=0.2.21
 ollama>=0.5.1
+beautifulsoup4>=4.9.0
+clean-text
+string
+
 
 # Database
 psycopg2-binary>=2.9.0
@@ -32,7 +36,6 @@ supabase>=0.0.0
 # Development tools
 loguru>=0.6.0
 tqdm>=4.65.0
-beautifulsoup4>=4.9.0
 python-dotenv>=0.19.0
 
 # Testing
