@@ -25,7 +25,6 @@ gliner>=0.2.21
 ollama>=0.5.1
 beautifulsoup4>=4.9.0
 clean-text
-string
 gensim
 minisom
 textblob

@@ -18,6 +18,9 @@ nltk.download("punkt")
 
 
 class SummarizationClassification:
+	"""
+	Author - Steven Chiddima Adams
+	"""
 
 	def __init__(self,
 		input_dir="./processed_data/",

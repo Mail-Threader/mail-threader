@@ -15,10 +15,13 @@ from bs4 import BeautifulSoup
 from typing import Optional
 from loguru import logger
 from database import DatabaseManager
+from utils import load_processed_df
 
 
 class DataPreparation:
 	"""
+	Author - Parinaz Teimouri
+	Matriculation Number - 319905
 	Class responsible for data preparation and storage tasks:
 	- Loading email data
 	- Cleaning and preprocessing text
@@ -606,6 +609,10 @@ class DataPreparation:
 		output_path = os.path.join(self.output_dir, f"processed_data_{timestamp}.csv")
 		df.to_csv(output_path, )
 		logger.success(f"\n✅ Saved {len(df)} rows to {output_path}")
+
+	def load_data(self):
+		df = load_processed_df(self.output_dir, "processed_data_")
+		return df
 
 	def save_to_database(self, df: pd.DataFrame, db: DatabaseManager):
 		"""Save a Pandas DataFrame to a database table."""

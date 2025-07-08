@@ -17,6 +17,10 @@ from database.database_manager import DatabaseManager
 
 
 class StoryDevelopment:
+	"""
+	Author - Siddhant Dalvi
+	Matriculation Number - 319413
+	"""
 
 	def __init__(
 		self,

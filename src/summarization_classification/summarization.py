@@ -26,6 +26,8 @@ from database import DatabaseManager
 
 class Summarization:
 	"""
+	Author - Siddhant Dalvi
+	Matriculation Number - 319413
     Class responsible for summarizing and classifying email data.
     - Text preprocessing (tokenization, lemmatization)
     - Topic modeling

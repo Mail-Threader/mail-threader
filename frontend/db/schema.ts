@@ -60,7 +60,7 @@ export type NewFileStorage = typeof fileStorageTable.$inferInsert;
 
 // Tables based on src/database/database_schema_config.sql
 
-export const processedData = pgTable('processed_data', {
+export const processedData = pgTable('processed_emails', {
 	messageId: varchar('message_id', { length: 255 }).primaryKey(),
 	mainId: varchar('main_id', { length: 255 }),
 	filename: varchar('filename', { length: 255 }),

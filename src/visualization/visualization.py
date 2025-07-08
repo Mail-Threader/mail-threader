@@ -22,6 +22,7 @@ from wordcloud import STOPWORDS, WordCloud
 
 class Visualization:
 	"""
+	Author - Azaharuddin Ansari
 	Class responsible for visualization tasks:
 	- Email volume over time
 	- Network analysis of email communications
