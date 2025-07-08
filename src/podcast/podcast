@@ -3,19 +3,24 @@ import json
 import os
 
 # Load your JSON
-with open("stories_20250705_110905.json", "r", encoding="utf-8") as f:
+with open("threaded_stories_creative_20250708_131257.json", "r", encoding="utf-8") as f:
     data = json.load(f)
 
-# Create folder
-os.makedirs("output_audio", exist_ok=True)
+# Define output directory
+output_dir = "output_audio_new"
+os.makedirs(output_dir, exist_ok=True)  # This ensures the directory exists
 
 # Generate TTS for each story
 for i, item in enumerate(data):
+    title = item.get("title", "").strip()
     story = item.get("story", "").strip()
-    if not story:
+    if not story or not title:
         continue
 
-    tts = gTTS(text=story, lang="en")
-    filename = f"output_audio/story_{i + 1}.mp3"
+    intro = f"Welcome to the Enron podcast. In today's episode, we're talking about {title}. "
+    full_text = intro + story
+
+    tts = gTTS(text=full_text, lang="en")
+    filename = os.path.join(output_dir, f"story_{i + 1}.mp3")
     tts.save(filename)
     print(f"Saved: {filename}")
