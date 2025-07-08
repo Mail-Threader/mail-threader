@@ -12,10 +12,8 @@ from cleantext import clean
 import string
 from itertools import groupby
 import spacy
-import language_tool_python
 import html
 from bs4 import BeautifulSoup
-import requests
 
 
 class DataPreparation:
@@ -164,28 +162,11 @@ class DataPreparation:
             r".*[-]+\s*Original Message\s*-+.*", re.MULTILINE | re.IGNORECASE
         )
 
-        reply_pattern = re.compile(r"\b(To|Cc|Subject|Date):\s*", re.IGNORECASE)
-
-        pattern = re.compile(
-            r"(?P<from_name>[\w\.-]+)\s*\n"
-            r"(?P<from_email>@enron\.com).*?To:\s*(?P<to_email>\S+)\n"
-            r".*?cc:\s*\n"
-            r"(?P<date>\d{2}/\d{2}/\d{2})\s+(?P<time>\d{2}:\d{2}).*?"
-            r"Subject:\s+(?P<subject>.+)\n"
-            r"(?P<am_pm>AM|PM)"
-        )
-        match = pattern.search(email_text)
-        if match:
-            print(match.groupdict())
-        else:
-            print("No match found.")
-
         forward_matches = list(forward_pattern.finditer(email_text))
         original_matches = list(original_pattern.finditer(email_text))
 
         forward_parts = []
         original_parts = []
-        reply_parts = []
         main_text = email_text
 
         # --- forwarded ---
@@ -225,29 +206,13 @@ class DataPreparation:
                 )
                 original_parts.append(email_text[start:end])
 
-        # --- reply ---
-        reply_lines = []
-        collecting = False
-        for line in email_text.splitlines():
-            if reply_pattern.search(line):
-                collecting = True
-            if collecting:
-                reply_lines.append(line)
-
-        if reply_lines:
-            reply_parts.append("\n".join(reply_lines))
-
-        print(reply_parts)
-
-        return main_text.strip(), forward_parts, original_parts, reply_parts
+        return main_text.strip(), forward_parts, original_parts
 
     def extract_all_emails(self, email_text):
         """Extracts main and forwarded emails as individual dictionaries."""
         extracted_emails = []
 
-        main_text, forwards_raw, original_parts, reply_parts = self.split_all_messages(
-            email_text
-        )
+        main_text, forwards_raw, original_parts = self.split_all_messages(email_text)
 
         # Main email
         header_part, body = self.split_headers_body(main_text)
@@ -386,7 +351,7 @@ class DataPreparation:
         # header
         headers = dict(
             re.findall(
-                r"^>?\s*(From|To|Cc|Subject|Date):\s*(.+)",
+                r"^>?\s*(From|To|Cc|Subject|Date|Sent):\s*(.+)",
                 header_text,
                 re.MULTILINE | re.IGNORECASE,
             )
@@ -405,7 +370,10 @@ class DataPreparation:
             org_data["subject"].add(headers["Subject"].strip())
 
         if "Date" in headers:
-            org_data["original_Date"].add(headers["Date"].strip())
+            org_data["date"].add(headers["Date"].strip())
+
+        if "Sent" in headers:
+            org_data["date"].add(headers["Sent"].strip())
 
         # extract information
         found_emails = re.findall(r"[\w\.-]+@[\w\.-]+", original_block)
@@ -418,11 +386,12 @@ class DataPreparation:
                 org_data["from"].add(email)
 
         # body after subject
+
         message_match = re.search(
-            r"^>?\s*Subject:.*?\n(?:^>?.*?\n)*?\n(.*)",
+            r"(?s)(?:Subject:.*?)\n\n(.*)",
             original_block,
-            re.DOTALL | re.MULTILINE,
         )
+
         if message_match:
             body_part = message_match.group(1).strip()
             org_data["body"].add(body_part)
@@ -451,7 +420,6 @@ class DataPreparation:
                 time_entities.append(ent.text.strip())
             elif ent.label_ == "ORG":
                 org_data["from"].add(ent.text.strip())
-        print(org_data["date"])
 
         # Combine date and time
         for i in range(max(len(date_entities), len(time_entities))):
@@ -486,7 +454,7 @@ class DataPreparation:
             fwd_data["date"].add(forward_info.group(2).replace("\n", " ").strip())
             from_strip = forward_info.group(1).strip()
             from_split = re.split(r"[;,]", from_strip)
-            fwd_data["from"].add(from_split)
+            fwd_data["from"].update(from_split)
 
         # Extract original sender info (original sender and date)
         sender_info = re.search(
@@ -495,7 +463,7 @@ class DataPreparation:
         )
         if sender_info:
             fwd_data["original_sender"].add(sender_info.group(1).strip())
-            fwd_data["original_Date"].add(sender_info.group(2).strip())
+            fwd_data["date"].add(sender_info.group(2).strip())
         else:
             fwd_data["original_sender"].add("can not find")
 
@@ -536,7 +504,42 @@ class DataPreparation:
 
         # Extract message body after the subject
         message_match = re.search(r"Subject:.*?\n\n(.*)", forward_block, re.DOTALL)
-        fwd_data["body"].add(message_match.group(1).strip()) if message_match else None
+
+        if message_match:
+            body_part = message_match.group(1).strip()
+            fwd_data["body"].add(body_part)
+
+            body_index = forward_block.find(body_part)
+        else:
+            body_part = ""
+            body_index = -1
+
+        if body_index != -1:
+            headers_only = forward_block[:body_index].strip()
+        else:
+            headers_only = forward_block
+
+        # NLP
+        doc = self.nlp(headers_only)
+        date_entities = []
+        time_entities = []
+
+        for ent in doc.ents:
+            if ent.label_ == "PERSON":
+                fwd_data["from"].add(ent.text.strip())
+            elif ent.label_ == "DATE":
+                date_entities.append(ent.text.strip())
+            elif ent.label_ == "TIME":
+                time_entities.append(ent.text.strip())
+            elif ent.label_ == "ORG":
+                fwd_data["from"].add(ent.text.strip())
+
+        # Combine date and time
+        for i in range(max(len(date_entities), len(time_entities))):
+            date = date_entities[i] if i < len(date_entities) else ""
+            time = time_entities[i] if i < len(time_entities) else ""
+            combined = f"{date} {time}".strip()
+            fwd_data["date"].add(combined)
 
         return fwd_data
 
@@ -593,6 +596,7 @@ class DataPreparation:
         return body
 
     def normalize_dates(self, text):
+        european_date = None
         if text is None:
             return ""
         cleaned_text = re.sub(r"\s*\([A-Z]{2,}\)$", "", text.strip())
