@@ -1,7 +1,6 @@
 import argparse
 import os
 from typing import Optional
-import time
 import pandas as pd
 from dotenv import load_dotenv
 from loguru import logger
@@ -216,14 +215,14 @@ def run_visualization(processed_data: Optional[pd.DataFrame],
 		return {}
 
 	logger.info("Running visualization step...")
-
 	visualizer = Visualization(
-		input_dir=dirs["processed_data_dir"],
-		analysis_dir=dirs["analysis_results_dir"],
+		input_dir=dirs["analysis_results_dir"],
+		#        analysis_dir=dirs["analysis_results_dir"],
 		output_dir=dirs["visualizations_dir"],
 	)
-	visualization_paths = visualizer.visualize_all(processed_data, analysis_results)
-	return visualization_paths
+	visualization_paths = visualizer.visualize_all()
+	# logger.info(f"Generated {len(visualization_paths)} visualizations")
+	# return visualization_paths
 
 
 def run_story_development(
