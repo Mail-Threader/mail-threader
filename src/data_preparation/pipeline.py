@@ -45,10 +45,14 @@ class DataPreparation:
         logger.info(f"Looking for files in: {os.path.join(self.input_dir)}")
 
         file_count = 0
+        limit_reached = False
         with tqdm(total=total_files, desc="Processing emails") as pbar:
             for root, dirs, files in os.walk(self.input_dir):
+                if limit_reached:
+                    break
                 for filename in files:
                     if limit is not None and file_count >= limit:
+                        limit_reached = True
                         break
                     file_count += 1
                     file_path = os.path.join(root, filename)
@@ -79,8 +83,6 @@ class DataPreparation:
                                         main_count += 1
                     pbar.set_postfix({"Total": total_emails, "Orig": original_count, "Fwd": forwarded_count, "Main": main_count})
                     pbar.update(1)
-            if limit is not None:
-                break
         end_time = time.time()
         elapsed = end_time - start_time
         logger.info(f"\nDone! Total emails: {total_emails}")
