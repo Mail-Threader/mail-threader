@@ -7,6 +7,7 @@ import pandas as pd
 from loguru import logger
 
 from . import extractor
+from . import threading
 from utils import load_processed_df
 
 
@@ -95,6 +96,7 @@ class DataPreparation:
             keep="first",
         )
         df = df.sort_values(by="date", ascending=True)
+        df = threading.build_threads(df)
         return df
 
     def save_to_json(self, df):
