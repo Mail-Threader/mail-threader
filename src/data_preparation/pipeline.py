@@ -1,5 +1,7 @@
 import os
 import time
+import math
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
 from typing import Optional
 from tqdm import tqdm
@@ -13,14 +15,79 @@ from . import dedup
 from utils import load_processed_df
 
 
+def _worker(files_batch):
+    results = []
+    for file_path in files_batch:
+        filename = os.path.basename(file_path)
+        try:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                raw_text = f.read()
+        except Exception:
+            continue
+        emails = extractor.extract_all_emails(raw_text)
+        for email_item in emails:
+            if email_item.get("from") or email_item.get("to") or email_item.get("subject"):
+                email_item["filename"] = filename
+                results.append(email_item)
+    return results
+
+
 class DataPreparation:
-    def __init__(self, input_dir="./data/", output_dir="./processed_data/"):
+    def __init__(self, input_dir="./data/", output_dir="./processed_data/", workers=None):
         self.input_dir = input_dir
         self.output_dir = output_dir
+        self.workers = workers or os.cpu_count()
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
     def process_all_emails(self, limit: Optional[int] = None):
+        all_files = []
+        for root, _dirs, files in os.walk(self.input_dir):
+            for fname in files:
+                all_files.append(os.path.join(root, fname))
+
+        if limit:
+            all_files = all_files[:limit]
+
+        total_files = len(all_files)
+        logger.info(f"Looking for files in: {os.path.join(self.input_dir)}")
+        logger.info(f"Found {total_files} files, processing with {self.workers} workers")
+
+        n_workers = min(self.workers, total_files) if total_files else 1
+        chunk_size = math.ceil(total_files / n_workers) if n_workers else total_files
+        chunks = [all_files[i:i + chunk_size] for i in range(0, total_files, chunk_size)]
+
+        all_results = []
+        start_time = time.time()
+        main_count = 0
+        original_count = 0
+        forwarded_count = 0
+        total_emails = 0
+
+        with ProcessPoolExecutor(max_workers=n_workers) as executor:
+            futures = {executor.submit(_worker, chunk): len(chunk) for chunk in chunks}
+            with tqdm(total=total_files, desc="Processing emails") as pbar:
+                for future in as_completed(futures):
+                    chunk_results = future.result()
+                    all_results.extend(chunk_results)
+                    for email_item in chunk_results:
+                        total_emails += 1
+                        t = email_item.get("type")
+                        if t == "original":
+                            original_count += 1
+                        elif t == "forwarded":
+                            forwarded_count += 1
+                        elif t == "main":
+                            main_count += 1
+                    pbar.set_postfix({"Total": total_emails, "Orig": original_count, "Fwd": forwarded_count, "Main": main_count})
+                    pbar.update(futures[future])
+
+        end_time = time.time()
+        elapsed = end_time - start_time
+        logger.info(f"\nDone! Total emails: {total_emails}")
+        logger.info(f"  Original: {original_count}, Forwarded: {forwarded_count}, Main: {main_count}")
+        logger.info(f"Time elapsed: {elapsed:.2f} seconds")
+
         data = {
             "message_id": [],
             "parent_message_id": [],
@@ -39,58 +106,13 @@ class DataPreparation:
             "has_body": [],
             "is_html": [],
         }
-        main_count = 0
-        original_count = 0
-        forwarded_count = 0
-        total_emails = 0
-        start_time = time.time()
-        total_files = sum(len(files) for _, _, files in os.walk(self.input_dir))
-        logger.info(f"Looking for files in: {os.path.join(self.input_dir)}")
-
-        file_count = 0
-        limit_reached = False
-        with tqdm(total=total_files, desc="Processing emails") as pbar:
-            for root, dirs, files in os.walk(self.input_dir):
-                if limit_reached:
-                    break
-                for filename in files:
-                    if limit is not None and file_count >= limit:
-                        limit_reached = True
-                        break
-                    file_count += 1
-                    file_path = os.path.join(root, filename)
-                    if os.path.isfile(file_path):
-                        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                            raw_text = f.read()
-                            email_data = extractor.extract_all_emails(raw_text)
-                            for email_item in email_data:
-                                if (
-                                    email_item.get("from")
-                                    or email_item.get("to")
-                                    or email_item.get("subject")
-                                ):
-                                    email_item["filename"] = filename
-                                    for key in data.keys():
-                                        if key in email_item:
-                                            value = email_item.get(key)
-                                            data[key].append(value if value not in (None, "") else None)
-                                        else:
-                                            data[key].append(None)
-                                    total_emails += 1
-                                    t = email_item.get("type")
-                                    if t == "original":
-                                        original_count += 1
-                                    elif t == "forwarded":
-                                        forwarded_count += 1
-                                    elif t == "main":
-                                        main_count += 1
-                    pbar.set_postfix({"Total": total_emails, "Orig": original_count, "Fwd": forwarded_count, "Main": main_count})
-                    pbar.update(1)
-        end_time = time.time()
-        elapsed = end_time - start_time
-        logger.info(f"\nDone! Total emails: {total_emails}")
-        logger.info(f"  Original: {original_count}, Forwarded: {forwarded_count}, Main: {main_count}")
-        logger.info(f"Time elapsed: {elapsed:.2f} seconds")
+        for email_item in all_results:
+            for key in data:
+                if key in email_item:
+                    value = email_item.get(key)
+                    data[key].append(value if value not in (None, "") else None)
+                else:
+                    data[key].append(None)
 
         df = pd.DataFrame(data)
         df = df.drop_duplicates(
@@ -130,10 +152,7 @@ class DataPreparation:
             return
         try:
             table_name = "processed_emails"
-            columns = [
-                "message_id", "main_id", "filename", "type",
-                "date", "from", "to", "subject", "body",
-            ]
+            columns = ["message_id", "main_id", "filename", "type", "date", "from", "to", "subject", "body"]
             db.insert_from_dataframe(df, table_name, columns=columns)
             logger.info(f"Successfully saved {len(df)} rows to database table '{table_name}'")
         except Exception as e:

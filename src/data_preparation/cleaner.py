@@ -1,8 +1,11 @@
 import re
 import quopri
 import html
+import warnings
 from cleantext import clean
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
+
+warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 
 
 def decode_qp_body(body, encoding):
