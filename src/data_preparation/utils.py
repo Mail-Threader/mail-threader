@@ -16,7 +16,9 @@ def normalize_dates(text):
 
 
 def strip_x500_dn(value):
-    cleaned = re.sub(r"\s*/O=[^ ]+(?: [^ ]+)*/?", "", value)
+    if not value:
+        return ""
+    cleaned = re.sub(r"\s*/O=[^/]+/", "", value)
     cleaned = re.sub(r"\s*</?O=ENRON[^>]*>", "", cleaned)
     cleaned = re.sub(r"\s*<[^>]*>", "", cleaned)
     return cleaned.strip()
