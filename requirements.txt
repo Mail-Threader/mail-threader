@@ -24,11 +24,9 @@ firebase-admin
 gliner>=0.2.21
 ollama>=0.5.1
 beautifulsoup4>=4.9.0
-clean-text
 gensim
 minisom
 textblob
-
 
 # Database
 psycopg2-binary>=2.9.0
