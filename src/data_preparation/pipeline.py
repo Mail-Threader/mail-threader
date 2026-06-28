@@ -8,6 +8,7 @@ from loguru import logger
 
 from . import extractor
 from . import threading
+from . import classifier
 from utils import load_processed_df
 
 
@@ -97,6 +98,7 @@ class DataPreparation:
         )
         df = df.sort_values(by="date", ascending=True)
         df = threading.build_threads(df)
+        df = classifier.classify_all(df)
         return df
 
     def save_to_json(self, df):
