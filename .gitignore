@@ -124,6 +124,7 @@ dmypy.json
 
 # macOS
 .DS_Store
+._*
 
 # Project specific
 data/
