@@ -142,7 +142,7 @@ def run_data_preparation(
 		return None
 
 	logger.info("Running data preparation step...")
-	df = data_prep.process_all_emails(limit=limit)
+	df = data_prep.process_all_emails()
 	data_prep.save_to_pickle(df)
 	logger.info(f"Processed {len(df)} emails")
 	data_prep.save_to_database(df, db)
