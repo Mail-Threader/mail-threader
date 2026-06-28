@@ -9,6 +9,7 @@ from loguru import logger
 from . import extractor
 from . import threading
 from . import classifier
+from . import dedup
 from utils import load_processed_df
 
 
@@ -97,6 +98,7 @@ class DataPreparation:
             keep="first",
         )
         df = df.sort_values(by="date", ascending=True)
+        df = dedup.fuzzy_dedup(df, threshold=0.90)
         df = threading.build_threads(df)
         df = classifier.classify_all(df)
         return df
