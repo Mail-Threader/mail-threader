@@ -1,240 +1,154 @@
 # Enron Email Analysis Pipeline
 
-This project provides a comprehensive pipeline for analyzing the Enron email dataset. It includes modules for data preparation, summarization/classification, visualization, and story development, along with a modern web interface for interacting with the analysis results.
+A comprehensive pipeline for analyzing the Enron email dataset — from raw text extraction to story development and visualization. Includes a modular Python backend and a Next.js interactive dashboard.
 
 ## Project Structure
 
-- `src/`: Contains all backend source code
-  - `main.py`: Main entry point for the pipeline
-  - `data_preparation/`: Module for loading and preprocessing email data
-    - `data_preparation.py`: Implementation of the DataPreparation class
-    - `__init__.py`: Exports the DataPreparation class
-  - `summarization_classification/`: Module for topic modeling, clustering, and analysis
-    - `summarization_classification.py`: Implementation of the SummarizationClassification class
-    - `__init__.py`: Exports the SummarizationClassification class
-  - `visualization/`: Module for creating visualizations
-    - `visualization.py`: Implementation of the Visualization class
-    - `__init__.py`: Exports the Visualization class
-  - `story_development/`: Module for generating narratives from the data
-    - `story_development.py`: Implementation of the StoryDevelopment class
-    - `__init__.py`: Exports the StoryDevelopment class
-  - `utils/`: Utility functions used across modules
-    - `utils.py`: Implementation of utility functions
-    - `__init__.py`: Exports utility functions
-  - `__init__.py`: Package initialization file
-- `frontend/`: Next.js web application
-  - `app/`: Next.js app directory with pages and layouts
-  - `components/`: Reusable React components
-  - `lib/`: Frontend utility functions and API clients
-  - `db/`: Database models and utilities
-- `tests/`: Test files
-  - `unit/`: Unit tests for individual components
-  - `integration/`: Integration tests for module interactions
-- `data/`: Directory containing the Enron email dataset
-- `output/`: Directory where all results will be stored (created automatically)
-- `.github/`: GitHub Actions workflows and templates
-- `.vscode/`: VS Code configuration files
+```
+src/
+  data_preparation/        Email extraction, cleaning, threading, dedup
+    pipeline.py            Orchestrator (parallel processing)
+    parser.py              Header parsing, MIME decode, address extraction
+    cleaner.py             Body cleaning (QP, HTML, quoting)
+    extractor.py           Message split (main/forwarded/original)
+    utils.py               Date normalization, X500 DN stripping
+    dedup.py               TF-IDF fuzzy duplicate detection
+    threading.py           BFS thread tree reconstruction
+    classifier.py          Heuristic content-type tagging
+  summarization_classification/
+  visualization/
+  story_development/
+  database/
+  utils/
+  main.py                  CLI entry point
+
+frontend/                  Next.js web application
+  app/                     Pages and layouts
+  components/              React components (shadcn/ui)
+  db/                      Database models
+
+tests/                     Test suite (65 tests)
+  test_parser.py
+  test_cleaner.py
+  test_extractor.py
+  test_pipeline.py
+  test_utils.py
+
+data/                      Raw Enron .txt files (gitignored)
+output/                    Generated results (gitignored)
+```
 
 ## Prerequisites
 
-- Python 3.9 or higher
-- Node.js 18 or higher
-- Required Python packages (listed in requirements.txt)
-- Required Node.js packages (listed in frontend/package.json)
+- Python 3.12
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+- Node.js 18+ (for frontend)
 
-## Quick Start for New Team Members
-
-If you're new to this project, we've created resources to help you get started quickly:
-
-1. Read the [Getting Started Guide](GETTING_STARTED.md) for comprehensive instructions
-2. Run the automated setup script:
-
-   **For Linux/macOS users:**
-
-   ```bash
-   chmod +x setup_dev_environment.sh
-   ./setup_dev_environment.sh
-   ```
-
-   **For Windows users:**
-
-   ```cmd
-   setup_dev_environment.bat
-   ```
-
-These scripts will set up your development environment automatically, including creating a virtual environment, installing dependencies, and setting up pre-commit hooks.
-
-## Installation
-
-### For Users
-
-1. Clone this repository
-2. Install the required dependencies:
+## Quick Start
 
 ```bash
-# Install Python dependencies
-pip install -r requirements.txt
+# Clone and enter
+git clone https://github.com/Mail-Threader/mail-threader.git
+cd mail-threader
 
-# Install frontend dependencies
-cd frontend
-npm install
+# Create virtual environment
+uv venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+
+# Install dependencies
+uv pip install -r requirements.txt
+uv pip install -e ".[dev]"
+
+# Run the full pipeline
+uv run python -c "
+from data_preparation import DataPreparation
+dp = DataPreparation()
+df = dp.process_all_emails()
+dp.save_to_pickle(df)
+dp.save_to_json(df)
+"
+
+# Run tests
+uv run pytest tests/ -v --tb=short
 ```
 
-### For Developers
+> **Note**: `uv` is the recommended package manager. If using pip, replace `uv pip` with `pip` and `uv run` with `python`.
 
-1. Clone this repository
-2. Create a virtual environment:
+## Data Preparation Pipeline
+
+The data preparation module transforms 7,220 raw Enron `.txt` files into a structured 20-column DataFrame in ~33 seconds (22-core parallel).
+
+### Pipeline steps
+
+| Step | Module | Description |
+|---|---|---|
+| File discovery | `pipeline.py` | Walks `./data/`, collects 7,220 files |
+| Parallel extraction | `extractor.py` | Splits files into main/forwarded/original blocks, parses headers, cleans bodies |
+| Exact dedup | `pipeline.py` | `drop_duplicates` on [date, from, to, subject, body] → 12,111→6,604 |
+| Fuzzy dedup | `dedup.py` | TF-IDF + NearestNeighbors (0.90 threshold) → 733 more dups marked |
+| Threading | `threading.py` | BFS from parent_message_id → 4,295 threads, up to depth 1 |
+| Classification | `classifier.py` | Heuristic → conversation / attachment_notice / newsletter / log |
+
+### Output columns (20)
+
+`message_id`, `parent_message_id`, `main_id`, `filename`, `type`, `date`, `from`, `to`, `cc`, `X-From`, `X-To`, `X-cc`, `subject`, `body`, `has_body`, `is_html`, `duplicate_of`, `thread_id`, `thread_depth`, `content_type`
+
+### Key improvements (data-prep-v2)
+
+- **5-module refactor**: Monolithic `data_preparation.py` → `parser.py`, `cleaner.py`, `extractor.py`, `utils.py`, `pipeline.py`
+- **Thread reconstruction**: BFS thread trees via `parent_message_id`
+- **Content-type classifier**: Heuristic tagging (85% conversation, 12% attachment, 2% newsletter)
+- **Fuzzy dedup**: TF-IDF cosine similarity at 0.90 threshold
+- **Multiprocessing**: ~88s → ~33s (2.7x speedup)
+- **Validation suite**: 65 pytest tests covering all modules
+
+## CLI Usage
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+# Run specific steps
+uv run python src/main.py --run vis story
+
+# Skip steps
+uv run python src/main.py --skip data-prep analysis
+
+# Custom data directory
+uv run python src/main.py --data-dir /path/to/emails
 ```
 
-3. Install the package in development mode with all development dependencies:
+Available steps: `data-prep`, `analysis`, `vis`, `story`
 
-```bash
-pip install -e ".[dev]"
-```
-
-4. Install frontend dependencies:
-
-```bash
-cd frontend
-npm install
-```
-
-5. Install pre-commit hooks:
-
-```bash
-pre-commit install
-```
-
-## How to Run
-
-### Backend
-
-The main entry point for the pipeline is `src/main.py`. You can run it with various command-line arguments to customize the execution.
-
-#### Basic Usage
-
-```bash
-python src/main.py
-```
-
-This will run the entire pipeline with default settings, using the data in the `data/` directory and storing results in the `output/` directory.
-
-#### Command-line Arguments
-
-- `--data-dir`: Directory containing the email data files (default: `./data/`)
-- `--output-dir`: Directory to store all output files (default: `./output/`)
-- `--skip`: Steps to skip (can specify multiple steps)
-  - Available steps: `data-prep`, `analysis`, `vis`, `story`
-  - Example: `--skip data-prep analysis`
-- `--run`: Steps to run (can specify multiple steps)
-  - Available steps: `data-prep`, `analysis`, `vis`, `story`
-  - Example: `--run vis story`
-
-### Examples
-
-Run only the visualization and story development steps:
-
-```bash
-python src/main.py --run vis story
-```
-
-Skip data preparation and analysis steps:
-
-```bash
-python src/main.py --skip data-prep analysis
-```
-
-Use a different data directory:
-
-```bash
-python src/main.py --data-dir /path/to/enron/emails
-```
-
-### Frontend
-
-To run the frontend development server:
+## Frontend
 
 ```bash
 cd frontend
+npm install
 npm run dev
+# → http://localhost:3000
 ```
-
-This will start the Next.js development server at http://localhost:3000.
 
 ## Development
 
-### Using the Makefile
-
-The project includes a Makefile with several useful commands:
+### Commands
 
 ```bash
-make help              # Display help information
-make clean            # Remove build artifacts
-make lint             # Check code style
-make format           # Format code
-make test             # Run tests
-make coverage         # Generate coverage reports
-make docs             # Generate documentation
-make dist             # Build package
-make install          # Install package
-make dev-install      # Install in development mode
+uv run pytest            # Run tests
+uv run pytest --cov=src  # With coverage
+uv run pytest tests/ -v  # Verbose
 ```
 
-### Code Style
+### Code style
 
-This project uses the following tools to ensure code quality:
-
-- **Backend**:
-
-  - yapf: Code formatting (tab-based indentation)
-
-- **Frontend**:
-  - ESLint: JavaScript/TypeScript linting
-  - Prettier: Code formatting
-  - TypeScript: Static type checking
-
-### Testing
-
-#### Backend Tests
-
-```bash
-pytest
-```
-
-To run tests with coverage:
-
-```bash
-pytest --cov=src --cov-report=html
-```
-
-#### Frontend Tests
-
-```bash
-cd frontend
-npm test
-```
+- Backend: yapf (tab indentation)
+- Frontend: ESLint + Prettier + TypeScript
 
 ### Documentation
 
-We use Sphinx for backend documentation and Next.js documentation for the frontend.
-
-To build the backend documentation:
-
 ```bash
-cd docs
-make html
+cd docs && make html     # Build Sphinx docs → docs/build/html/
 ```
 
-The built documentation will be in `docs/build/html/`.
+Full module reference: [`data_preparation.md`](data_preparation.md)
 
-## Contributing
+## Project status
 
-Please see the [Contributing Guide](docs/source/contributing.rst) for details on how to contribute to this project.
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+[data-prep-v2](https://github.com/Mail-Threader/mail-threader/tree/data-prep-v2) contains reworked extraction with threading, classification, dedup, multiprocessing. See branch for full commit history.

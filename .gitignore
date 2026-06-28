@@ -184,3 +184,6 @@ next-env.d.ts
 
 #firebase
 serviceAccountKey.json
+
+# local reference documentation
+/data_preparation.md
